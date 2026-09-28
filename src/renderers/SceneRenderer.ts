@@ -168,7 +168,12 @@ export class SceneRenderer implements DisplayRenderer {
 	#particles: ParticleSystem | null = null
 	#customizeEffect: typeof import('../render/particles').customizeEffect | null = null
 	#particleShaders: ParticleShaders | null = null
+	/** Images of image particles, created with the particle engine. */
+	#particleAtlas: import('../render/particles').ParticleAtlas | null = null
 	#particleClock = 0
+	/** When the dice last moved (links fade out from there), and one key per pair of dice. */
+	#linkMoved = 0
+	readonly #linkKeys = new WeakMap<Entry, WeakMap<Entry, object>>()
 	/** Resting dice emitting their aura: when it started and whether it skips the conditions (manual). */
 	readonly #auras = new Map<Entry, { readonly since: number; readonly always: boolean }>()
 	#particleSeed = 'particles'
@@ -380,7 +385,9 @@ export class SceneRenderer implements DisplayRenderer {
 		const options = this.#options!.particles
 		if(options && !this.#particles) {
 			const engine = await import('../render/particles')
-			this.#particles ??= new engine.ParticleSystem()
+			this.#particleAtlas ??= new engine.ParticleAtlas(() => this.#requestRender())
+			const atlas = this.#particleAtlas
+			this.#particles ??= new engine.ParticleSystem(url => atlas.slot(url))
 			this.#customizeEffect = engine.customizeEffect
 			this.#particleShaders = { vertex: engine.PARTICLE_VERTEX, fragment: engine.PARTICLE_FRAGMENT }
 		}
@@ -390,6 +397,7 @@ export class SceneRenderer implements DisplayRenderer {
 		const effect = options && base && this.#customizeEffect ? this.#customizeEffect(base, options) : null
 		// Options may have changed while the chunks were loading.
 		if(this.#options!.particles !== options) return
+		this.#particleAtlas?.prepare(effect)
 		this.#particles?.configure(effect, options?.intensity ?? 1, seed)
 	}
 
@@ -1048,7 +1056,8 @@ export class SceneRenderer implements DisplayRenderer {
 			if(!this.#running) this.#render()
 			// A pulsing glow breathes for as long as dice are on the table.
 			const breathing = Boolean(this.#options?.glow?.pulse && !this.#reducedMotion() && this.#entries.some(entry => entry.visible))
-			if(this.#outgoing || this.#rings.length || this.#particles?.count || this.#auras.size || breathing) this.#ambient()
+			const linking = this.#linkFade(performance.now()) > 0
+			if(this.#outgoing || this.#rings.length || this.#particles?.count || this.#auras.size || breathing || linking) this.#ambient()
 		})
 	}
 
@@ -1203,14 +1212,44 @@ export class SceneRenderer implements DisplayRenderer {
 			// Discarded or fading dice lose their aura.
 			if(entry.saturation > 0.99 && entry.alpha > 0.99) particles.aura(entry, entry.position, dt, entry.shape.radius, fade, entry.die, always)
 		}
+		this.#emitLinks(particles, now, dt)
 		// The clock advances even with no particle alive (cooldowns count real time).
 		particles.update(dt)
 		if(!particles.count) return
 		const batches = particles.build()
 		const pointScale = viewportHeight / 2 / Math.tan(DISPLAY_CAMERA_FOV / 2)
 		const shaders = this.#particleShaders!
-		this.#gl!.drawParticles(frame, batches.alpha, batches.alphaCount, false, pointScale, shaders)
-		this.#gl!.drawParticles(frame, batches.additive, batches.additiveCount, true, pointScale, shaders)
+		const atlas = this.#particleAtlas
+		this.#gl!.drawParticles(frame, batches.alpha, batches.alphaCount, false, pointScale, shaders, now / 1000, atlas)
+		this.#gl!.drawParticles(frame, batches.additive, batches.additiveCount, true, pointScale, shaders, now / 1000, atlas)
+	}
+
+	/** Links fade over `linkSeconds` once playback ends; 0 when they are done. */
+	#linkFade(now: number): number {
+		const particles = this.#particles
+		if(!particles?.hasLink) return 0
+		if(this.#running) {
+			this.#linkMoved = now
+			return 1
+		}
+		const seconds = particles.linkSeconds
+		return seconds > 0 ? Math.max(0, 1 - (now - this.#linkMoved) / 1000 / seconds) : 0
+	}
+
+	/** Energy between every pair of dice on the table (the two bodies of a d100 count as one). */
+	#emitLinks(particles: ParticleSystem, now: number, dt: number): void {
+		const fade = this.#linkFade(now)
+		if(fade <= 0) return
+		const dice = this.#entries.filter(entry => entry.visible && entry.alpha > 0.99)
+		for(let i = 0; i < dice.length; i++) for(let j = i + 1; j < dice.length; j++) {
+			const a = dice[i]!, b = dice[j]!
+			if(a.die === b.die) continue
+			let keys = this.#linkKeys.get(a)
+			if(!keys) this.#linkKeys.set(a, keys = new WeakMap())
+			let key = keys.get(b)
+			if(!key) keys.set(b, key = {})
+			particles.link(key, a.position, b.position, dt, fade, [a.die, b.die])
+		}
 	}
 
 	#assertReady(): void {

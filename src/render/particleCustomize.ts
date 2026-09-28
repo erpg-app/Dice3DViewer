@@ -36,8 +36,10 @@ export const customizeEffect = (effect: ParticleEffectDefinition, options: Custo
 	const known = cache.get(key)
 	if(known) return known
 	const tint = options.color ? parseParticleColor(options.color) : null
-	const result: Partial<Record<ParticleMoment, ParticleEmitterOptions>> & { auraSeconds?: number } = {}
+	const result: Partial<Record<ParticleMoment, ParticleEmitterOptions>> & { auraSeconds?: number; linkDistance?: number; linkSeconds?: number } = {}
 	if(effect.auraSeconds !== undefined) result.auraSeconds = effect.auraSeconds
+	if(effect.linkDistance !== undefined) result.linkDistance = effect.linkDistance
+	if(effect.linkSeconds !== undefined) result.linkSeconds = effect.linkSeconds
 	for(const moment of PARTICLE_MOMENTS) {
 		const emitter = effect[moment]
 		if(!emitter || moments[moment] === false) continue

@@ -1,4 +1,5 @@
 import type { ReadonlyQuat, ReadonlyVec3 } from '../engine/vector'
+import type { ParticleAtlasSource } from './particleAtlas'
 
 /**
  * Small WebGL renderer for dice. Works on WebGL2 and falls back to WebGL1
@@ -269,6 +270,8 @@ void main() {
 
 /** Floats per particle: x, y, z, size, premultiplied r, g, b, a, shape, angle. */
 const PARTICLE_FLOATS = 10
+/** Texture unit of the particle image atlas (surfaces use the lower ones). */
+const ATLAS_UNIT = 7
 
 /** Particle program sources, provided by the lazy particle engine. */
 export interface ParticleShaders {
@@ -312,6 +315,10 @@ export class DiceGL {
 	#particle: Program | null = null
 	#particleBuffer!: WebGLBuffer
 	#particleBytes = 0
+	/** Particle images (uploaded again when the atlas version changes). */
+	#atlas: WebGLTexture | null = null
+	#atlasSource: ParticleAtlasSource | null = null
+	#atlasVersion = -1
 	#quad!: WebGLBuffer
 	#lost = false
 	// Redundant state skipped between draws: frame uniforms per program, the
@@ -375,6 +382,9 @@ export class DiceGL {
 		if(!particleBuffer) throw new Error('Unable to create a WebGL buffer.')
 		this.#particleBuffer = particleBuffer
 		this.#particleBytes = 0
+		this.#atlas = null
+		this.#atlasSource = null
+		this.#atlasVersion = -1
 		this.#quad = this.#buffer(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]))
 		this.#surfaceFrame = null
 		this.#haloFrame = null
@@ -531,7 +541,8 @@ export class DiceGL {
 	 * shape, angle, as instanced quads (no point-size limit of the GPU).
 	 * `pixelScale` converts a world size at depth w into pixels (viewport height / 2 / tan(fov / 2)).
 	 */
-	drawParticles(frame: FrameSetup, data: Float32Array, count: number, additive: boolean, pixelScale: number, shaders: ParticleShaders): void {
+	/** `time` (seconds) animates bolts and arcs; `atlas` holds the images of image particles. */
+	drawParticles(frame: FrameSetup, data: Float32Array, count: number, additive: boolean, pixelScale: number, shaders: ParticleShaders, time = 0, atlas: ParticleAtlasSource | null = null): void {
 		const instancing = this.#instancing
 		if(count <= 0 || !instancing) return
 		const gl = this.gl
@@ -548,6 +559,8 @@ export class DiceGL {
 		gl.uniform1f(u.uPixelScale ?? null, pixelScale)
 		gl.uniform2f(u.uViewport ?? null, gl.drawingBufferWidth, gl.drawingBufferHeight)
 		gl.uniform1f(u.uAdditive ?? null, additive ? 1 : 0)
+		gl.uniform1f(u.uTime ?? null, time % 3600)
+		this.#bindAtlas(atlas, u.uAtlas)
 		this.#bindQuad(attributes.aCorner)
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.#particleBuffer)
 		const view = data.subarray(0, count * PARTICLE_FLOATS)
@@ -572,6 +585,29 @@ export class DiceGL {
 			instancing.divisor(location, 0)
 			gl.disableVertexAttribArray(location)
 		}
+	}
+
+	/** Binds the particle image atlas on its own unit, uploading it when it changed. */
+	#bindAtlas(atlas: ParticleAtlasSource | null, sampler: WebGLUniformLocation | null | undefined): void {
+		const gl = this.gl
+		gl.activeTexture(gl.TEXTURE0 + ATLAS_UNIT)
+		if(atlas && (!this.#atlas || this.#atlasSource !== atlas || this.#atlasVersion !== atlas.version)) {
+			this.#atlas ??= gl.createTexture()
+			gl.bindTexture(gl.TEXTURE_2D, this.#atlas)
+			gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+			gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas.source)
+			gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+			gl.generateMipmap(gl.TEXTURE_2D)
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+			this.#atlasSource = atlas
+			this.#atlasVersion = atlas.version
+		} else gl.bindTexture(gl.TEXTURE_2D, atlas ? this.#atlas : null)
+		gl.uniform1i(sampler ?? null, ATLAS_UNIT)
+		gl.activeTexture(gl.TEXTURE0)
 	}
 
 	drawSurface(frame: FrameSetup, mesh: GLMesh, material: SurfaceMaterial, state: DrawState): void {
@@ -720,6 +756,7 @@ export class DiceGL {
 		for(const program of [this.#surface, this.#halo, this.#shadow, this.#ring, this.#light, this.#particle]) if(program) gl.deleteProgram(program.program)
 		gl.deleteBuffer(this.#quad)
 		gl.deleteBuffer(this.#particleBuffer)
+		if(this.#atlas) gl.deleteTexture(this.#atlas)
 		gl.getExtension('WEBGL_lose_context')?.loseContext()
 	}
 }

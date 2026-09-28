@@ -434,8 +434,12 @@ interface DiceSkinOptions {
 type DiceParticlePreset =
   | 'sparkle' | 'fire' | 'arcane' | 'frost' | 'dust' | 'confetti' | 'electric' | 'smoke'
   | 'lava' | 'storm' | 'holy' | 'shadow' | 'poison' | 'nature' | 'cosmic'
-type ParticleShape = 'soft' | 'spark' | 'star' | 'ring' | 'confetti' | 'smoke'
-type ParticleMoment = 'trail' | 'ground' | 'impact' | 'collision' | 'settle' | 'aura' | 'explode' | 'critical'
+  | 'lightning' | 'blizzard' | 'hearts'
+type ParticleShape =
+  | 'soft' | 'spark' | 'star' | 'ring' | 'confetti' | 'smoke'
+  | 'bolt' | 'arc' | 'flame' | 'snowflake' | 'heart' | 'diamond' | 'triangle' | 'cross'
+type ParticleOrientation = 'random' | 'upright' | 'motion'
+type ParticleMoment = 'trail' | 'ground' | 'impact' | 'collision' | 'settle' | 'aura' | 'explode' | 'critical' | 'link'
 
 interface DiceParticleOptions {
   readonly preset?: DiceParticlePreset
@@ -443,7 +447,7 @@ interface DiceParticleOptions {
   readonly intensity?: number                 // 0–3, padrão 1 (multiplica a quantidade)
   readonly size?: number                      // 0.2–4, padrão 1 (multiplica o tamanho)
   readonly color?: string                     // recolore todos os emissores mantendo a rampa de brilho
-  readonly shape?: ParticleShape              // mesma forma para todos os emissores
+  readonly shape?: ParticleShape              // mesma forma para todos os emissores (imagens ficam)
   readonly moments?: Partial<Record<ParticleMoment, boolean>>  // false desliga o momento
 }
 
@@ -457,6 +461,9 @@ interface ParticleEffectDefinition {
   readonly explode?: ParticleEmitterOptions   // filho de explosão nascendo
   readonly critical?: ParticleEmitterOptions  // críticos da timeline
   readonly auraSeconds?: number               // padrão 2,5
+  readonly link?: ParticleEmitterOptions      // entre cada par de dados; size multiplica a distância
+  readonly linkDistance?: number              // maior distância ligada, padrão 5
+  readonly linkSeconds?: number               // quanto dura depois que os dados param, padrão 2
 }
 
 interface ParticleEmitterOptions {
@@ -473,7 +480,9 @@ interface ParticleEmitterOptions {
   readonly blend?: ParticleBlend              // add (brilho) ou alpha (fumaça, confete)
   readonly grow?: number                      // tamanho final relativo, padrão 0.3
   readonly flicker?: number                   // cintilação 0–1
-  readonly shape?: ParticleShape              // padrão soft; spark segue o movimento
+  readonly shape?: ParticleShape              // padrão soft; bolt e arc redesenham o zigue-zague
+  readonly image?: string                     // URL (CORS) desenhada no lugar da forma; cores multiplicam
+  readonly orient?: ParticleOrientation       // padrão motion para spark/bolt, random para o resto
   readonly spin?: number                      // rotação do sprite, rad/s
   readonly when?: ParticleCondition           // quando o emissor toca (padrão: sempre)
 }

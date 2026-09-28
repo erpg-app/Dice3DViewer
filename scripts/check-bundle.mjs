@@ -10,8 +10,8 @@ const dist = path.join(root, 'dist')
 const BUDGETS = Object.freeze({
 	/** What every presentation loads: WebGL renderer, physics, timeline, skins. */
 	libraryGzip: 45 * 1024,
-	/** Optional particle engine, fetched only when `particles` is used. */
-	particlesGzip: 6 * 1024,
+	/** Optional particle engine (shaders of 14 shapes and the image atlas), fetched only when `particles` is used. */
+	particlesGzip: 7 * 1024,
 	/** Built-in particle presets, fetched only when a preset name is used. */
 	presetsGzip: 5 * 1024,
 	adaptersGzip: 3 * 1024

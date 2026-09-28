@@ -5,6 +5,7 @@ import type {
 	ParticleBurstMoment,
 	ParticleEffectDefinition,
 	ParticleMoment,
+	ParticleOrientation,
 	ParticleShape
 } from '../src'
 
@@ -40,6 +41,8 @@ interface EditableEmitter {
 	grow?: number
 	flicker?: number
 	shape?: ParticleShape
+	image?: string
+	orient?: ParticleOrientation
 	spin?: number
 	blend?: 'add' | 'alpha'
 	colors: string[]
@@ -90,7 +93,8 @@ const MOMENTS: readonly { readonly id: ParticleMoment; readonly label: string; r
 	{ id: 'settle', label: 'ao parar', unit: 'por dado', hint: 'Quando o dado para.' },
 	{ id: 'aura', label: 'aura', unit: 'partículas/s', hint: 'Em volta do dado parado, apagando ao longo da duração.' },
 	{ id: 'explode', label: 'explosão', unit: 'por explosão', hint: 'Um dado explodido nasce do pai.' },
-	{ id: 'critical', label: 'crítico', unit: 'por dado', hint: 'Sucesso ou falha crítica na timeline.' }
+	{ id: 'critical', label: 'crítico', unit: 'por dado', hint: 'Sucesso ou falha crítica na timeline.' },
+	{ id: 'link', label: 'entre dados', unit: 'partículas/s por par', hint: 'Energia ligando cada par de dados enquanto rolam e um pouco depois (raio/arco, vida curta, tamanho ~1,1 = distância).' }
 ]
 const BURSTS: ReadonlySet<ParticleMoment> = new Set(['impact', 'collision', 'settle', 'aura', 'explode', 'critical'])
 export const PRESETS: readonly [DiceParticlePreset, string][] = [
@@ -98,10 +102,16 @@ export const PRESETS: readonly [DiceParticlePreset, string][] = [
 	['electric', 'elétrico'], ['confetti', 'confete'], ['smoke', 'fumaça'], ['dust', 'poeira'],
 	['lava', 'lava (fogo + terra)'], ['storm', 'tempestade (raio + nuvem)'], ['holy', 'sagrado (luz + estrelas)'],
 	['shadow', 'sombra (vazio + arcano)'], ['poison', 'veneno (ácido + fumaça)'], ['nature', 'natureza (folhas + pólen)'],
-	['cosmic', 'cósmico (estrelas + nebulosa)']
+	['cosmic', 'cósmico (estrelas + nebulosa)'], ['lightning', 'raio (arcos + relâmpagos)'],
+	['blizzard', 'nevasca (flocos de neve)'], ['hearts', 'corações']
 ]
 const SHAPES: readonly [ParticleShape, string][] = [
-	['soft', 'luz suave'], ['spark', 'faísca'], ['star', 'estrela'], ['ring', 'anel'], ['confetti', 'confete'], ['smoke', 'fumaça']
+	['soft', 'luz suave'], ['spark', 'faísca'], ['star', 'estrela'], ['ring', 'anel'], ['confetti', 'confete'], ['smoke', 'fumaça'],
+	['bolt', 'raio'], ['arc', 'arco elétrico'], ['flame', 'chama'], ['snowflake', 'floco de neve'], ['heart', 'coração'],
+	['diamond', 'diamante'], ['triangle', 'triângulo'], ['cross', 'cruz']
+]
+const ORIENTATIONS: readonly [ParticleOrientation, string][] = [
+	['random', 'aleatória'], ['upright', 'em pé'], ['motion', 'segue o movimento']
 ]
 const DIRECTIONS: readonly [Direction, string][] = [
 	['sphere', 'todas as direções'], ['up', 'para cima'], ['out', 'para os lados'], ['back', 'contra o movimento']
@@ -462,6 +472,7 @@ export const createParticleEditor = (root: HTMLElement, handlers: ParticleEditor
 			h('div', { class: 'row' },
 				h('label', {}, 'direção ', select(DIRECTIONS, emitter.direction ?? 'sphere', value => { emitter.direction = value; changed() })),
 				h('label', {}, 'forma ', select(SHAPES, emitter.shape ?? 'soft', value => { emitter.shape = value; changed() })),
+				h('label', {}, 'orientação ', select(ORIENTATIONS, emitter.orient ?? (emitter.shape === 'spark' || emitter.shape === 'bolt' ? 'motion' : 'random'), value => { emitter.orient = value; changed() })),
 				h('label', {}, 'mistura ', select([['add', 'brilho (soma luz)'], ['alpha', 'opaca (cobre)']] as const, emitter.blend ?? 'add', value => { emitter.blend = value; changed() }))),
 			h('div', { class: 'row' },
 				numeric('gravity', 'gravidade', 0, -20, 20, 0.1, 'positivo cai, negativo sobe'),
@@ -471,6 +482,13 @@ export const createParticleEditor = (root: HTMLElement, handlers: ParticleEditor
 				numeric('grow', 'tamanho final', 0.3, 0, 5, 0.05, 'fator do tamanho no fim da vida'),
 				numeric('flicker', 'cintilação', 0, 0, 1, 0.05, 'piscar aleatório'),
 				numeric('spin', 'giro', 0, -20, 20, 0.5, 'rotação do sprite (rad/s); faíscas seguem o movimento')),
+			h('div', { class: 'row' },
+				h('label', {}, 'imagem (URL, troca a forma) ', h('input', { type: 'url', value: emitter.image ?? '', placeholder: 'https://…/sprite.png', onchange: (event: Event) => {
+					const value = (event.target as HTMLInputElement).value.trim()
+					if(value) emitter.image = value
+					else delete emitter.image
+					changed()
+				} }))),
 			h('div', { class: 'row colors-row' }, h('span', { textContent: 'cores ao longo da vida' }), colorList(emitter.colors, true, 1)),
 			h('div', { class: 'row colors-row' }, h('label', {}, usePalette, ' paleta (cada partícula sorteia uma cor)'), paletteBox),
 			...(moment.id === 'aura'

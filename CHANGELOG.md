@@ -4,6 +4,20 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 
 ## [Não publicado]
 
+### Adicionado
+
+- formas de partícula `bolt` (raio com bifurcação), `arc` (filamentos
+  elétricos), `flame`, `snowflake`, `heart`, `diamond`, `triangle` e `cross`;
+  raios e arcos redesenham o zigue-zague 14 vezes por segundo;
+- partículas de imagem: `image` no emissor desenha uma URL no lugar da forma
+  (até 16 imagens por viewer num atlas 4 × 4, tingidas pelas cores);
+- `orient` no emissor: `random`, `upright` (em pé na tela) ou `motion`
+  (aponta para onde a partícula vai);
+- momento `link`: energia entre cada par de dados (partículas no meio do par,
+  viradas ao longo dele e do tamanho da distância) enquanto rolam e
+  `linkSeconds` depois; `linkDistance` limita o alcance;
+- presets `lightning` (com raios entre os dados), `blizzard` e `hearts`.
+
 ### Corrigido
 
 - `onTimelineProgress`: em lances com explosões no próprio arremesso, `initial`

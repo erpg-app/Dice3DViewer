@@ -4,6 +4,7 @@ import type { ParticleEffectDefinition, ParticleEmitterOptions } from '../types'
 import type { ReadonlyVec3 } from '../engine/vector'
 
 export { customizeEffect } from './particleCustomize'
+export { ParticleAtlas, PARTICLE_ATLAS_SLOTS } from './particleAtlas'
 export { PARTICLE_FRAGMENT, PARTICLE_VERTEX } from './particleShaders'
 
 /** Particles alive at once; a burst beyond this recycles random live particles. */
@@ -51,15 +52,38 @@ interface Emitter {
 	readonly swirl: number
 	readonly grow: number
 	readonly flicker: number
-	/** Sprite index understood by the particle shader. */
+	/** Sprite index understood by the particle shader (an image is 16 + its atlas slot). */
 	readonly shape: number
+	readonly orient: Orientation
 	readonly spin: number
 }
 
+/** A link particle spans the gap between two dice along this angle. */
+interface Span {
+	readonly gap: number
+	readonly angle: number
+}
+
+const NO_MOTION: ReadonlyVec3 = [0, 0, 0]
+
+/** 0 random, 1 upright, 2 along the motion. */
+type Orientation = 0 | 1 | 2
+
 const DIRECTIONS: Readonly<Record<string, Direction>> = { up: 0, out: 1, sphere: 2, back: 3 }
+const ORIENTATIONS: Readonly<Record<string, Orientation>> = { random: 0, upright: 1, motion: 2 }
+const UPRIGHT = 1
+const MOTION = 2
 /** Sprite indices of the particle shader. */
-export const SHAPES: Readonly<Record<string, number>> = { soft: 0, spark: 1, star: 2, ring: 3, confetti: 4, smoke: 5 }
-const SPARK = 1
+export const SHAPES: Readonly<Record<string, number>> = {
+	soft: 0, spark: 1, star: 2, ring: 3, confetti: 4, smoke: 5,
+	bolt: 6, arc: 7, flame: 8, snowflake: 9, heart: 10, diamond: 11, triangle: 12, cross: 13
+}
+/** Shader index of the first image of the atlas. */
+export const IMAGE_SHAPE_BASE = 16
+/** Shapes that point along their motion unless told otherwise. */
+const MOTION_SHAPES: ReadonlySet<string> = new Set(['spark', 'bolt'])
+/** Sprite space x points up the screen at this angle (shader `q`, world z grows down the screen). */
+const UP_ANGLE = -Math.PI / 2
 
 export interface ParticleBatches {
 	readonly additive: Float32Array
@@ -108,6 +132,12 @@ export class ParticleSystem {
 	#lastBurst = new WeakMap<object, Map<ParticleEmitterOptions, number>>()
 	/** Continuous moments draw `when.chance` once per die and roll. */
 	#lottery = new WeakMap<object, Map<ParticleEmitterOptions, boolean>>()
+	/** Atlas slot of an emitter image (-1 when the atlas is full or absent). */
+	readonly #imageSlot: ((url: string) => number) | undefined
+
+	constructor(imageSlot?: (url: string) => number) {
+		this.#imageSlot = imageSlot
+	}
 
 	get count(): number {
 		return this.#count
@@ -116,6 +146,15 @@ export class ParticleSystem {
 	/** Seconds an aura lasts after a die rests (0 without an aura). */
 	get auraSeconds(): number {
 		return this.#effect?.aura ? Math.max(0, this.#effect.auraSeconds ?? 2.5) : 0
+	}
+
+	/** Seconds links keep going after the dice rest (0 without links). */
+	get linkSeconds(): number {
+		return this.#effect?.link ? Math.max(0, this.#effect.linkSeconds ?? 2) : 0
+	}
+
+	get hasLink(): boolean {
+		return Boolean(this.#effect?.link)
 	}
 
 	get hasTrail(): boolean {
@@ -162,6 +201,21 @@ export class ParticleSystem {
 		if(!options || dt <= 0 || fade <= 0) return
 		if(!always && !this.#allows(options, subject, key, undefined, undefined, true)) return
 		this.#stream(this.#debt, key, options, options.amount * this.#intensity * fade * dt, position, [0, 0, 0], radius * 0.6)
+	}
+
+	/**
+	 * Energy between two dice: particles at the middle of the pair, turned
+	 * along it and sized to the gap. `fade` goes from 1 to 0 after the dice rest.
+	 */
+	link(key: object, a: ReadonlyVec3, b: ReadonlyVec3, dt: number, fade: number, subjects?: readonly ParticleSubject[]): void {
+		const options = this.#effect?.link
+		if(!options || dt <= 0 || fade <= 0) return
+		const dx = b[0] - a[0], dz = b[2] - a[2]
+		const gap = Math.sqrt(dx * dx + dz * dz)
+		if(gap < 1e-3 || gap > Math.max(0, this.#effect?.linkDistance ?? 5)) return
+		if(!this.#allows(options, subjects, key, undefined, undefined, true)) return
+		const middle: ReadonlyVec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
+		this.#stream(this.#debt, key, options, options.amount * this.#intensity * fade * dt, middle, NO_MOTION, 0, false, { gap, angle: Math.atan2(dz, dx) })
 	}
 
 	burst(kind: ParticleBurst, position: ReadonlyVec3, radius: number, burst: BurstOptions = {}): void {
@@ -238,8 +292,8 @@ export class ParticleSystem {
 			this.#py[i] = y
 			this.#pz[i] = this.#pz[i]! + vz * dt
 			this.#vx[i] = vx; this.#vy[i] = vy; this.#vz[i] = vz
-			// Sparks stretch along their motion (screen x = world x, sprite y = world z).
-			if(emitter.shape === SPARK && vx * vx + vz * vz > 0.0025) this.#angle[i] = Math.atan2(vz, vx)
+			// Sparks and bolts stretch along their motion (screen x = world x, sprite y = world z).
+			if(emitter.orient === MOTION && vx * vx + vz * vz > 0.0025) this.#angle[i] = Math.atan2(vz, vx)
 			else this.#angle[i] = this.#angle[i]! + this.#spin[i]! * dt
 		}
 	}
@@ -293,18 +347,20 @@ export class ParticleSystem {
 		return true
 	}
 
-	#stream(debts: WeakMap<object, number>, key: object, options: ParticleEmitterOptions, amount: number, position: ReadonlyVec3, velocity: ReadonlyVec3, radius: number, flat = false): void {
+	#stream(debts: WeakMap<object, number>, key: object, options: ParticleEmitterOptions, amount: number, position: ReadonlyVec3, velocity: ReadonlyVec3, radius: number, flat = false, span?: Span): void {
 		const debt = (debts.get(key) ?? 0) + amount
 		const count = Math.floor(debt)
 		debts.set(key, debt - count)
-		if(count > 0) this.#emit(this.#register(options), count, position, velocity, radius, flat)
+		if(count > 0) this.#emit(this.#register(options), count, position, velocity, radius, flat, span)
 	}
 
 	#register(options: ParticleEmitterOptions): number {
 		const known = this.#registry.get(options)
-		if(known !== undefined) return known
+		// An image may have lost its atlas cell to the images of a later effect.
+		if(known !== undefined && (!options.image || this.#emitters[known]!.shape === this.#imageShape(options.image))) return known
 		const colors = options.colors.map(color => parseParticleColor(color) ?? [1, 1, 1, 1])
 		const palette = (options.palette ?? []).map(color => parseParticleColor(color) ?? [1, 1, 1, 1])
+		const shapeName = options.shape ?? 'soft'
 		const emitter: Emitter = {
 			options,
 			stops: Float32Array.from(colors.length > 1 ? colors.flat() : [...colors[0]!, ...colors[0]!]),
@@ -316,7 +372,8 @@ export class ParticleSystem {
 			swirl: options.swirl ?? 0,
 			grow: options.grow ?? 0.3,
 			flicker: options.flicker ?? 0,
-			shape: SHAPES[options.shape ?? 'soft'] ?? 0,
+			shape: options.image ? this.#imageShape(options.image) : SHAPES[shapeName] ?? 0,
+			orient: ORIENTATIONS[options.orient ?? (!options.image && MOTION_SHAPES.has(shapeName) ? 'motion' : 'random')] ?? 0,
 			spin: options.spin ?? 0
 		}
 		this.#emitters.push(emitter)
@@ -324,8 +381,14 @@ export class ParticleSystem {
 		return this.#emitters.length - 1
 	}
 
+	/** Shader index of an image (a soft glow without an atlas cell). */
+	#imageShape(url: string): number {
+		const slot = this.#imageSlot?.(url) ?? -1
+		return slot >= 0 ? IMAGE_SHAPE_BASE + slot : 0
+	}
+
 	/** `flat` spreads the particles on the table (ground marks) instead of around a point. */
-	#emit(emitterIndex: number, count: number, position: ReadonlyVec3, source: ReadonlyVec3, radius: number, flat: boolean): void {
+	#emit(emitterIndex: number, count: number, position: ReadonlyVec3, source: ReadonlyVec3, radius: number, flat: boolean, span?: Span): void {
 		const emitter = this.#emitters[emitterIndex]!
 		const options = emitter.options
 		const random = this.#random
@@ -366,8 +429,16 @@ export class ParticleSystem {
 			this.#life[i] = random.range(options.life[0], options.life[1])
 			this.#size[i] = random.range(options.size[0], options.size[1])
 			this.#phase[i] = random.next() * Math.PI * 2
-			this.#angle[i] = random.next() * Math.PI * 2
+			const turn = random.next() * Math.PI * 2
+			this.#angle[i] = emitter.orient === UPRIGHT ? UP_ANGLE
+				: emitter.orient === MOTION && vx * vx + vz * vz > 0.0025 ? Math.atan2(vz, vx)
+				: turn
 			this.#spin[i] = emitter.spin * (0.5 + random.next()) * (random.next() < 0.5 ? -1 : 1)
+			if(span) {
+				// Links: as long as the gap between the dice, pointing either way along it.
+				this.#size[i] = this.#size[i]! * span.gap
+				this.#angle[i] = span.angle + (random.next() < 0.5 ? 0 : Math.PI)
+			}
 			if(paletteSize) {
 				const pick = Math.floor(random.next() * paletteSize) * 3
 				this.#tint[i * 3] = emitter.palette[pick]!

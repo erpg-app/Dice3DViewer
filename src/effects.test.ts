@@ -3,12 +3,14 @@ import { describe, it } from 'node:test'
 import {
 	PARTICLE_MOMENTS,
 	PARTICLE_PRESET_NAMES,
+	PARTICLE_SHAPES,
 	parseParticleColor,
 	validateGlowOptions,
 	validateParticleOptions,
 	validateSkinOptions
 } from './particleOptions'
 import {
+	IMAGE_SHAPE_BASE,
 	PARTICLE_CAPACITY,
 	PARTICLE_STRIDE,
 	ParticleSystem,
@@ -40,14 +42,15 @@ describe('dice skins and particle options', () => {
 		assert.equal(customizeEffect(custom, { preset: 'fire' } as never), custom, 'no quick control: the definition itself')
 	})
 
-	it('ships fifteen distinct presets, each reacting to every moment of a roll', async () => {
-		assert.equal(PARTICLE_PRESET_NAMES.length, 15)
+	it('ships eighteen distinct presets, each reacting to every moment of a roll', async () => {
+		assert.equal(PARTICLE_PRESET_NAMES.length, 18)
 		for(const name of PARTICLE_PRESET_NAMES) {
 			const preset = PARTICLE_PRESETS[name]
-			assert.deepEqual(PARTICLE_MOMENTS.filter(moment => !preset[moment]), [], `${name} defines every moment`)
+			// Links between dice are an extra of a few presets.
+			assert.deepEqual(PARTICLE_MOMENTS.filter(moment => moment !== 'link' && !preset[moment]), [], `${name} defines every moment`)
 		}
 		const signatures = new Set(PARTICLE_PRESET_NAMES.map(name => JSON.stringify(PARTICLE_PRESETS[name])))
-		assert.equal(signatures.size, 15, 'no two presets are the same')
+		assert.equal(signatures.size, 18, 'no two presets are the same')
 		assert.equal(await loadParticlePresets(), PARTICLE_PRESETS, 'the lazy loader serves the same definitions')
 	})
 
@@ -90,10 +93,13 @@ describe('dice skins and particle options', () => {
 		const invalid: unknown[] = [
 			{ preset: 'fire', size: 10 },
 			{ preset: 'fire', color: 'red' },
-			{ preset: 'fire', shape: 'heart' },
+			{ preset: 'fire', shape: 'skull' },
 			{ preset: 'fire', moments: { sparkle: true } },
 			{ preset: 'fire', moments: { ground: 'no' } },
-			{ effect: { ground: emitter({ shape: 'heart' as 'soft' }) } },
+			{ effect: { ground: emitter({ shape: 'skull' as 'soft' }) } },
+			{ effect: { ground: emitter({ image: ' ' }) } },
+			{ effect: { ground: emitter({ orient: 'sideways' as 'random' }) } },
+			{ effect: { link: emitter(), linkDistance: -1 } },
 			{ effect: { trail: emitter({ palette: [] }) } },
 			{ effect: { trail: emitter({ spin: Number.NaN }) } }
 		]
@@ -233,6 +239,85 @@ describe('particle system', () => {
 		}
 		assert.equal(sparks, 12)
 		assert.equal(confetti, 6)
+	})
+
+	it('knows every shape of the options, and validates images and orientations', () => {
+		assert.deepEqual(Object.keys(SHAPES), [...PARTICLE_SHAPES], 'one shader sprite per shape')
+		assert.ok(Math.max(...Object.values(SHAPES)) < IMAGE_SHAPE_BASE, 'images start after the shapes')
+		assert.doesNotThrow(() => validateParticleOptions({ effect: { trail: emitter({ shape: 'bolt', image: 'https://cdn.example/bat.png', orient: 'upright' }) } }))
+	})
+
+	it('turns particles upright, along their motion or at random', () => {
+		const system = new ParticleSystem()
+		system.configure({
+			impact: emitter({ amount: 8, shape: 'bolt', direction: 'out', speed: [2, 2] }),
+			settle: emitter({ amount: 8, shape: 'heart', orient: 'upright', direction: 'out', speed: [2, 2] }),
+			critical: emitter({ amount: 8, shape: 'spark', orient: 'random', direction: 'out', speed: [2, 2] })
+		}, 1, 'orientation')
+		system.burst('impact', [0, 1, 0], 0)
+		system.burst('settle', [0, 1, 0], 0)
+		system.burst('critical', [0, 1, 0], 0)
+		system.update(0.05)
+		const batches = system.build()
+		let bolts = 0, hearts = 0, loose = 0
+		for(let i = 0; i < batches.additiveCount; i++) {
+			const o = i * PARTICLE_STRIDE
+			const shape = batches.additive[o + 8]!, angle = batches.additive[o + 9]!
+			const heading = Math.atan2(batches.additive[o + 2]!, batches.additive[o]!)
+			const off = Math.abs(Math.atan2(Math.sin(heading - angle), Math.cos(heading - angle)))
+			if(shape === SHAPES.bolt) { bolts++; assert.ok(off < 1e-3, 'a bolt points where it flies') }
+			else if(shape === SHAPES.heart) { hearts++; assert.equal(angle, Math.fround(-Math.PI / 2), 'a heart stands upright') }
+			else if(off > 1e-3) loose++
+		}
+		assert.equal(bolts, 8)
+		assert.equal(hearts, 8)
+		assert.ok(loose > 0, 'a spark told to turn at random does not follow its motion')
+	})
+
+	it('links two dice with particles along the gap, only within reach and while the fade lasts', () => {
+		const system = new ParticleSystem()
+		system.configure({ link: emitter({ amount: 100, size: [1, 1], speed: [0, 0], grow: 1, shape: 'bolt' }), linkDistance: 4 }, 1, 'links')
+		assert.equal(system.hasLink, true)
+		assert.equal(system.linkSeconds, 2, 'default link duration')
+		const key = {}
+		system.link(key, [0, 0.5, 0], [3, 0.5, 0], 0.1, 1)
+		system.update(0.05)
+		const batches = system.build()
+		assert.equal(batches.additiveCount, 10)
+		for(let i = 0; i < batches.additiveCount; i++) {
+			const o = i * PARTICLE_STRIDE
+			assert.ok(Math.abs(batches.additive[o]! - 1.5) < 1e-6, 'born at the middle of the pair')
+			assert.ok(Math.abs(batches.additive[o + 3]! - 3) < 1e-5, 'as long as the gap')
+			assert.ok(Math.abs(Math.sin(batches.additive[o + 9]!)) < 1e-6, 'turned along the pair')
+		}
+		system.clear()
+		system.link(key, [0, 0.5, 0], [5, 0.5, 0], 0.1, 1)
+		system.link(key, [0, 0.5, 0], [2, 0.5, 0], 0.1, 0)
+		system.update(0.05)
+		assert.equal(system.count, 0, 'too far apart, or faded out')
+	})
+
+	it('draws image particles from their atlas cell, or as a glow without one', () => {
+		const slots = new Map([['https://cdn.example/bat.png', 3]])
+		const system = new ParticleSystem(url => slots.get(url) ?? -1)
+		system.configure({
+			impact: emitter({ amount: 4, image: 'https://cdn.example/bat.png', shape: 'star' }),
+			settle: emitter({ amount: 4, image: 'https://cdn.example/unknown.png' })
+		}, 1, 'images')
+		system.burst('impact', [0, 1, 0], 0)
+		system.burst('settle', [0, 1, 0], 0)
+		system.update(0.05)
+		const batches = system.build()
+		const shapes = Array.from({ length: batches.additiveCount }, (_, i) => batches.additive[i * PARTICLE_STRIDE + 8]!)
+		assert.deepEqual(shapes.filter(shape => shape === IMAGE_SHAPE_BASE + 3).length, 4, 'the image wins over the shape')
+		assert.deepEqual(shapes.filter(shape => shape === SHAPES.soft).length, 4, 'no cell: a soft glow')
+		// The same emitter moves to another cell when the atlas reassigns it.
+		slots.set('https://cdn.example/bat.png', 5)
+		system.burst('impact', [0, 1, 0], 0)
+		system.update(0.05)
+		const moved = system.build()
+		const latest = Array.from({ length: moved.additiveCount }, (_, i) => moved.additive[i * PARTICLE_STRIDE + 8]!)
+		assert.ok(latest.includes(IMAGE_SHAPE_BASE + 5))
 	})
 
 	it('gives each particle one palette color, faded by the ramp', () => {

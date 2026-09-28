@@ -6,16 +6,22 @@ import type {
 	DiceSkinOptions,
 	ParticleEmitterOptions,
 	ParticleMoment,
+	ParticleOrientation,
 	ParticleShape
 } from './types'
 
 /** Built-in effects; their definitions load with the particle engine (render/particlePresets). */
 export const PARTICLE_PRESET_NAMES: readonly DiceParticlePreset[] = Object.freeze([
 	'sparkle', 'fire', 'arcane', 'frost', 'dust', 'confetti', 'electric', 'smoke',
-	'lava', 'storm', 'holy', 'shadow', 'poison', 'nature', 'cosmic'
+	'lava', 'storm', 'holy', 'shadow', 'poison', 'nature', 'cosmic',
+	'lightning', 'blizzard', 'hearts'
 ])
-export const PARTICLE_SHAPES: readonly ParticleShape[] = Object.freeze(['soft', 'spark', 'star', 'ring', 'confetti', 'smoke'])
-export const PARTICLE_MOMENTS: readonly ParticleMoment[] = Object.freeze(['trail', 'ground', 'impact', 'collision', 'settle', 'aura', 'explode', 'critical'])
+export const PARTICLE_SHAPES: readonly ParticleShape[] = Object.freeze([
+	'soft', 'spark', 'star', 'ring', 'confetti', 'smoke',
+	'bolt', 'arc', 'flame', 'snowflake', 'heart', 'diamond', 'triangle', 'cross'
+])
+export const PARTICLE_ORIENTATIONS: readonly ParticleOrientation[] = Object.freeze(['random', 'upright', 'motion'])
+export const PARTICLE_MOMENTS: readonly ParticleMoment[] = Object.freeze(['trail', 'ground', 'impact', 'collision', 'settle', 'aura', 'explode', 'critical', 'link'])
 
 /** `#rgb`, `#rrggbb` or `#rrggbbaa` as linear-free 0..1 RGBA; null when invalid. */
 export const parseParticleColor = (value: unknown): [number, number, number, number] | null => {
@@ -87,6 +93,8 @@ const validateEmitter = (emitter: ParticleEmitterOptions, path: string): void =>
 	assertFinite(emitter.flicker, `${path}.flicker`, 0, 1)
 	assertFinite(emitter.spin, `${path}.spin`)
 	assertShape(emitter.shape, `${path}.shape`)
+	if(emitter.image !== undefined && (typeof emitter.image !== 'string' || !emitter.image.trim())) fail(`${path}.image`, 'must be a non-empty image URL')
+	if(emitter.orient !== undefined && !PARTICLE_ORIENTATIONS.includes(emitter.orient)) fail(`${path}.orient`, `must be one of ${PARTICLE_ORIENTATIONS.join(', ')}`)
 	if(emitter.blend !== undefined && emitter.blend !== 'add' && emitter.blend !== 'alpha') fail(`${path}.blend`, 'must be add or alpha')
 	assertColors(emitter.colors, `${path}.colors`)
 	if(emitter.palette !== undefined) assertColors(emitter.palette, `${path}.palette`)
@@ -116,6 +124,8 @@ export const validateParticleOptions = (options: DiceParticleOptions | null): vo
 		if(!effect || typeof effect !== 'object') fail('particles.effect', 'must be an object')
 		for(const key of PARTICLE_MOMENTS) if(effect[key] !== undefined) validateEmitter(effect[key]!, `particles.effect.${key}`)
 		assertFinite(effect.auraSeconds, 'particles.effect.auraSeconds', 0)
+		assertFinite(effect.linkDistance, 'particles.effect.linkDistance', 0)
+		assertFinite(effect.linkSeconds, 'particles.effect.linkSeconds', 0)
 	}
 }
 

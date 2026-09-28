@@ -3,7 +3,7 @@ export { DISPLAY_CANCELLED_CODE, DisplayCancelledError, isDisplayCancelledError 
 export { DEFAULT_TIMELINE_OPTIONS } from './timelineOptions'
 export { DICE_LOOK_FORMAT, DICE_LOOK_VERSION, createDiceLook, diceLookOptions } from './diceLook'
 export type { DiceLook, DiceLookOptions } from './diceLook'
-export { PARTICLE_MOMENTS, PARTICLE_PRESET_NAMES, PARTICLE_SHAPES } from './particleOptions'
+export { PARTICLE_MOMENTS, PARTICLE_ORIENTATIONS, PARTICLE_PRESET_NAMES, PARTICLE_SHAPES } from './particleOptions'
 export { loadParticlePresets } from './particlePresetLoader'
 export {
 	SYSTEM_THEME_PROFILES,
@@ -49,6 +49,7 @@ export type {
 	ParticleBurstMoment,
 	ParticleCondition,
 	ParticleMoment,
+	ParticleOrientation,
 	ParticleShape,
 	ParticleEffectDefinition,
 	ParticleEmitterOptions,

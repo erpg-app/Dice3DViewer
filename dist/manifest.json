@@ -9,12 +9,12 @@
     "src": "src/index.ts"
   },
   "src/render/particlePresets.ts": {
-    "file": "chunks/particlePresets-14780f98.js",
+    "file": "chunks/particlePresets-d5a8a3d9.js",
     "isDynamicEntry": true,
     "src": "src/render/particlePresets.ts"
   },
   "src/render/particles.ts": {
-    "file": "chunks/particles-c74f72d0.js",
+    "file": "chunks/particles-f3ed2a4d.js",
     "imports": [
       "src/index.ts"
     ],

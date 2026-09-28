@@ -283,11 +283,20 @@ export type ParticleBlend = 'add' | 'alpha';
 /**
  * Sprite of a particle: `soft` round glow, `spark` streak along the motion,
  * `star` four-point twinkle, `ring` hollow circle, `confetti` spinning
- * paper, `smoke` soft irregular puff.
+ * paper, `smoke` soft irregular puff, `bolt` jagged lightning along the
+ * motion, `arc` crackling electric filaments, `flame` tongue of fire,
+ * `snowflake` six-armed crystal, `heart`, `diamond` faceted gem, `triangle`
+ * and `cross`. Bolts and arcs redraw their zigzag several times per second.
  */
-export type ParticleShape = 'soft' | 'spark' | 'star' | 'ring' | 'confetti' | 'smoke';
+export type ParticleShape = 'soft' | 'spark' | 'star' | 'ring' | 'confetti' | 'smoke' | 'bolt' | 'arc' | 'flame' | 'snowflake' | 'heart' | 'diamond' | 'triangle' | 'cross';
+/**
+ * How a particle sprite is turned: `random` starts at any angle (then `spin`),
+ * `upright` starts straight up on screen (images, hearts), `motion` points
+ * along the particle's own movement (sparks, bolts, comets).
+ */
+export type ParticleOrientation = 'random' | 'upright' | 'motion';
 /** Moments of a roll an effect can react to. */
-export type ParticleMoment = 'trail' | 'ground' | 'impact' | 'collision' | 'settle' | 'aura' | 'explode' | 'critical';
+export type ParticleMoment = 'trail' | 'ground' | 'impact' | 'collision' | 'settle' | 'aura' | 'explode' | 'critical' | 'link';
 /** Moments that play once per event (the ones `playParticles` can trigger). */
 export type ParticleBurstMoment = 'impact' | 'collision' | 'settle' | 'aura' | 'explode' | 'critical';
 /**
@@ -334,7 +343,16 @@ export interface ParticleEmitterOptions {
     readonly flicker?: number;
     /** Sprite drawn for each particle. Default `soft`. */
     readonly shape?: ParticleShape;
-    /** Rotation speed in radians per second (confetti, stars). Sparks follow their motion instead. */
+    /**
+     * Image drawn for each particle instead of `shape` (URL of a PNG/WebP with
+     * transparency, loaded with CORS). The colors multiply the image: keep them
+     * white to show it as is. Up to 16 different images per viewer; until one
+     * loads its particles are invisible, and a broken one falls back to a glow.
+     */
+    readonly image?: string;
+    /** How the sprite is turned. Default `motion` for sparks and bolts, `random` otherwise. */
+    readonly orient?: ParticleOrientation;
+    /** Rotation speed in radians per second (confetti, stars). Particles turned along their motion ignore it. */
     readonly spin?: number;
     /** Each particle takes one of these colors; `colors` then only fades it over its life. */
     readonly palette?: readonly string[];
@@ -361,8 +379,20 @@ export interface ParticleEffectDefinition {
     readonly critical?: ParticleEmitterOptions;
     /** How long the aura lasts after a die rests. Default `2.5`. */
     readonly auraSeconds?: number;
+    /**
+     * Energy between dice: while they roll (and `linkSeconds` after the last
+     * one rests) every pair closer than `linkDistance` emits `amount`
+     * particles per second at its middle, turned along the pair and as long as
+     * the gap times `size` (`[1.1, 1.1]` reaches both dice). Suits `bolt` and
+     * `arc` with a short life.
+     */
+    readonly link?: ParticleEmitterOptions;
+    /** Largest gap (world units, a die is about 1.2 across) a link crosses. Default `5`. */
+    readonly linkDistance?: number;
+    /** Seconds links keep going after the dice rest. Default `2`. */
+    readonly linkSeconds?: number;
 }
-export type DiceParticlePreset = 'sparkle' | 'fire' | 'arcane' | 'frost' | 'dust' | 'confetti' | 'electric' | 'smoke' | 'lava' | 'storm' | 'holy' | 'shadow' | 'poison' | 'nature' | 'cosmic';
+export type DiceParticlePreset = 'sparkle' | 'fire' | 'arcane' | 'frost' | 'dust' | 'confetti' | 'electric' | 'smoke' | 'lava' | 'storm' | 'holy' | 'shadow' | 'poison' | 'nature' | 'cosmic' | 'lightning' | 'blizzard' | 'hearts';
 export interface DiceParticleOptions {
     /** Built-in effect. Ignored when `effect` is given. */
     readonly preset?: DiceParticlePreset;
@@ -372,7 +402,7 @@ export interface DiceParticleOptions {
     readonly intensity?: number;
     /** Recolors every emitter with this hue, keeping its bright-to-dark ramp. */
     readonly color?: string;
-    /** Draws every emitter with this sprite. */
+    /** Draws every emitter with this sprite (emitters with an `image` keep their image). */
     readonly shape?: ParticleShape;
     /** Particle size multiplier (0.2..4). Default `1`. */
     readonly size?: number;

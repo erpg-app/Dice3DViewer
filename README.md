@@ -334,6 +334,9 @@ Os 15 presets reagem a todos os momentos da rolagem (inclusive o rastro no chão
 | `poison` | ácido + fumaça: névoa tóxica, poças ácidas, bolhas e vapores |
 | `nature` | folhas + pólen: folhas no voo, vaga-lumes, flores no crítico |
 | `cosmic` | estrelas + nebulosa: poeira estelar, rastro de nebulosa, galáxia no crítico |
+| `lightning` | arcos elétricos em volta do dado, raios em cada impacto e no crítico |
+| `blizzard` | flocos de neve girando no voo, geada no chão |
+| `hearts` | corações subindo dos dados, sempre em pé |
 
 Ajustes rápidos por cima de qualquer efeito:
 
@@ -344,7 +347,8 @@ await viewer.updateOptions({
     intensity: 1.5,           // 0..3, multiplica a quantidade
     size: 1.4,                // 0.2..4, multiplica o tamanho
     color: '#4cc9f0',         // recolore tudo mantendo a rampa de brilho
-    shape: 'star',            // soft | spark | star | ring | confetti | smoke
+    shape: 'star',            // soft | spark | star | ring | confetti | smoke | bolt | arc | flame
+                              // | snowflake | heart | diamond | triangle | cross
     moments: { ground: false } // desliga momentos específicos
   }
 })
@@ -362,6 +366,7 @@ Cada efeito reage a momentos da rolagem:
 | `aura` | em volta do dado parado, apagando em `auraSeconds` |
 | `explode` | um dado explodido nasce do pai (timeline) |
 | `critical` | sucesso ou falha crítica (timeline) |
+| `link` | energia entre cada par de dados enquanto rolam e `linkSeconds` depois (`size` multiplica a distância) |
 
 Efeitos próprios são declarativos: um emissor por momento, com forma, rotação,
 rampa de cores, paleta e **condições** (`when`) que decidem quando ele toca.

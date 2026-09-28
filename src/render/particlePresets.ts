@@ -17,6 +17,9 @@ const LEAVES = ['#5fbf3f', '#8fd14f', '#c7e05a', '#f2c94c', '#3f9b2f']
 const BLOSSOM = ['#ff9ec7', '#ffd1e6', '#ffffff', '#c7e05a', '#ffb3d9']
 const STARLIGHT = ['#ffffff', '#9ad7ff', '#d9a6ff', '#ffd1f0', '#a6fff2']
 const STAR_FADE = ['#ffffff', '#ffffffaa', '#ffffff00']
+const HEARTS = ['#ff4d6d', '#ff8fab', '#ffb3c6', '#ff006e', '#ffffff']
+const LIGHTNING = ['#ffffff', '#e0f4ff', '#8cc8ff', '#3a6bff00']
+const SNOW = ['#ffffff', '#e6f6ffcc', '#bfe6ff00']
 
 // Hits: the same burst for a die landing on the table and for dice hitting
 // each other (collisions play at 70% of the hit strength).
@@ -31,6 +34,9 @@ const SMOKE_HIT: ParticleEmitterOptions = { amount: 6, life: [0.6, 1.1], size: [
 const LAVA_HIT: ParticleEmitterOptions = { amount: 20, life: [0.4, 0.9], size: [0.14, 0.26], speed: [2.5, 5], direction: 'up', gravity: 11, drag: 0.8, colors: ['#fff3b0', '#ffb347', '#ff5a1acc', '#8c1a0800'], shape: 'spark' }
 const STORM_HIT: ParticleEmitterOptions = { amount: 18, life: [0.08, 0.2], size: [0.22, 0.4], speed: [3.5, 7], direction: 'out', drag: 4, colors: ['#ffffff', '#d4f1ff', '#7aa8ff', '#5b3dff00'], flicker: 1, shape: 'spark' }
 const SHADOW_HIT: ParticleEmitterOptions = { amount: 14, life: [0.25, 0.55], size: [0.18, 0.32], speed: [2, 4.5], direction: 'out', gravity: 2, drag: 2, colors: ['#e0c3ff', '#9b5cff', '#4b1fa800'], flicker: 0.4, shape: 'spark' }
+const LIGHTNING_HIT: ParticleEmitterOptions = { amount: 5, life: [0.08, 0.18], size: [0.7, 1.1], speed: [2, 4], direction: 'out', drag: 8, colors: LIGHTNING, flicker: 0.7, shape: 'bolt' }
+const SNOW_HIT: ParticleEmitterOptions = { amount: 14, life: [0.5, 1], size: [0.1, 0.2], speed: [1.4, 3], direction: 'out', gravity: 3, drag: 1.5, colors: SNOW, shape: 'snowflake', spin: 3 }
+const HEART_HIT: ParticleEmitterOptions = { amount: 10, life: [0.6, 1], size: [0.12, 0.22], speed: [1, 2.4], direction: 'up', gravity: -0.5, drag: 1.8, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' }
 const POISON_HIT: ParticleEmitterOptions = { amount: 16, life: [0.4, 0.8], size: [0.07, 0.14], speed: [1.5, 3.5], direction: 'up', gravity: 9, drag: 1, colors: ['#f0ffc2', '#9dff5c', '#3fbf1f00'] }
 
 export const PARTICLE_PRESETS: Readonly<Record<DiceParticlePreset, ParticleEffectDefinition>> = Object.freeze({
@@ -205,5 +211,44 @@ export const PARTICLE_PRESETS: Readonly<Record<DiceParticlePreset, ParticleEffec
 		explode: { amount: 60, life: [0.6, 1.2], size: [0.2, 0.45], speed: [3, 6], direction: 'sphere', drag: 1.6, colors: ['#ffffff', '#ffffffcc', '#ffffff00'], palette: ['#6a4cff', '#3a7bff', '#c04cff', '#ff4cc9', '#ffffff'], grow: 0.6 },
 		critical: { amount: 100, life: [1, 1.8], size: [0.1, 0.22], speed: [1.2, 3], direction: 'out', gravity: -0.3, drag: 0.8, swirl: 6, colors: ['#ffffff', '#ffffffcc', '#ffffff00'], palette: STARLIGHT, flicker: 0.5, shape: 'star', spin: 1.5 },
 		auraSeconds: 4
+	},
+	// Lightning: arcs crackling around the dice, bolts on every hit and a thunderclap on criticals.
+	lightning: {
+		trail: { amount: 30, life: [0.06, 0.14], size: [0.35, 0.6], speed: [0.2, 0.8], direction: 'sphere', drag: 6, colors: ['#ffffff', '#d6f0ff', '#6fb8ff99', '#3a6bff00'], flicker: 0.6, shape: 'arc' },
+		ground: { amount: 6, life: [0.5, 0.9], size: [0.3, 0.5], speed: [0, 0.02], direction: 'out', drag: 3, colors: ['#e6f7ff', '#7fc4ffaa', '#2a6bff00'], flicker: 0.9, shape: 'arc' },
+		impact: LIGHTNING_HIT,
+		collision: { amount: 3, life: [0.08, 0.16], size: [0.5, 0.8], speed: [0, 0.3], direction: 'sphere', drag: 6, colors: LIGHTNING, flicker: 0.8, shape: 'arc' },
+		settle: { amount: 4, life: [0.12, 0.25], size: [0.8, 1.2], speed: [0.5, 1.5], direction: 'out', drag: 6, colors: LIGHTNING, flicker: 0.6, shape: 'bolt' },
+		aura: { amount: 8, life: [0.08, 0.18], size: [0.4, 0.7], speed: [0, 0.2], direction: 'sphere', drag: 5, colors: LIGHTNING, flicker: 0.8, shape: 'arc' },
+		explode: { amount: 10, life: [0.12, 0.3], size: [1, 1.6], speed: [3, 6], direction: 'sphere', drag: 6, colors: LIGHTNING, flicker: 0.6, shape: 'bolt' },
+		critical: { amount: 14, life: [0.15, 0.35], size: [1.2, 2], speed: [2, 5], direction: 'out', drag: 5, colors: LIGHTNING, flicker: 0.8, shape: 'bolt' },
+		link: { amount: 26, life: [0.08, 0.18], size: [1.05, 1.15], speed: [0, 0], grow: 1, colors: ['#ffffff', '#f0f9ff', '#a8d8ffdd', '#5a8cff00'], flicker: 0.3, shape: 'bolt', orient: 'random' },
+		auraSeconds: 2,
+		linkDistance: 9,
+		linkSeconds: 2.5
+	},
+	// Blizzard: snowflakes swirling behind the dice and settling as frost.
+	blizzard: {
+		trail: { amount: 40, life: [0.8, 1.5], size: [0.12, 0.24], speed: [0.2, 0.7], direction: 'sphere', gravity: 0.6, drag: 1.5, swirl: 1.2, colors: SNOW, shape: 'snowflake', spin: 1.2 },
+		ground: { amount: 10, life: [1.4, 2.4], size: [0.14, 0.26], speed: [0, 0.03], direction: 'out', drag: 3, colors: ['#ffffffcc', '#d6f0ff88', '#a6dcff00'], shape: 'snowflake', spin: 0.2 },
+		impact: SNOW_HIT,
+		collision: SNOW_HIT,
+		settle: { amount: 3, life: [0.6, 1], size: [0.5, 0.8], speed: [0, 0.1], direction: 'out', drag: 2, colors: ['#ffffff', '#cdeeff', '#8fd0ff00'], grow: 2.5, shape: 'ring' },
+		aura: { amount: 10, life: [1.2, 2], size: [0.1, 0.2], speed: [0.2, 0.5], direction: 'out', gravity: -0.1, drag: 0.5, swirl: 3, colors: SNOW, shape: 'snowflake', spin: 1 },
+		explode: { amount: 40, life: [0.8, 1.4], size: [0.14, 0.28], speed: [2.5, 5], direction: 'sphere', drag: 1.8, colors: SNOW, shape: 'snowflake', spin: 3 },
+		critical: { amount: 80, life: [1.2, 2], size: [0.14, 0.3], speed: [1, 3], direction: 'out', drag: 0.8, swirl: 5, colors: SNOW, shape: 'snowflake', spin: 2 },
+		auraSeconds: 3.5
+	},
+	// Hearts rising from the dice, always upright.
+	hearts: {
+		trail: { amount: 24, life: [0.7, 1.2], size: [0.14, 0.24], speed: [0.2, 0.6], direction: 'up', gravity: -0.6, drag: 1.4, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' },
+		ground: { amount: 6, life: [1.2, 2], size: [0.12, 0.2], speed: [0, 0.04], direction: 'out', drag: 3, colors: ['#ffffffaa', '#ffffff55', '#ffffff00'], palette: HEARTS, shape: 'heart', orient: 'upright' },
+		impact: HEART_HIT,
+		collision: HEART_HIT,
+		settle: { amount: 8, life: [0.9, 1.4], size: [0.16, 0.26], speed: [0.6, 1.4], direction: 'up', gravity: -1, drag: 1.2, colors: STAR_FADE, palette: HEARTS, flicker: 0.2, shape: 'heart', orient: 'upright' },
+		aura: { amount: 5, life: [1.2, 2], size: [0.12, 0.2], speed: [0.2, 0.5], direction: 'up', gravity: -0.6, drag: 0.6, swirl: 1, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' },
+		explode: { amount: 30, life: [0.8, 1.4], size: [0.16, 0.3], speed: [2, 4], direction: 'sphere', drag: 1.6, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' },
+		critical: { amount: 50, life: [1.2, 2], size: [0.2, 0.36], speed: [1, 2.6], direction: 'up', gravity: -0.8, drag: 1, swirl: 1.5, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' },
+		auraSeconds: 3
 	}
 })
