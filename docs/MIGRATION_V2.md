@@ -70,7 +70,7 @@ await viewer.display({
 ```json
 {
   "dependencies": {
-    "@erpg/dice3dview": "github:arkanus-app/dice-box-erpg#main"
+    "@erpg/dice3dview": "github:erpg-app/Dice3DViewer#main"
   }
 }
 ```

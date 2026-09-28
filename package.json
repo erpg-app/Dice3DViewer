@@ -6,7 +6,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/arkanus-app/dice-box-erpg.git"
+    "url": "git+https://github.com/erpg-app/Dice3DViewer.git"
   },
   "main": "./dist/dice3dview.es.js",
   "module": "./dist/dice3dview.es.js",
@@ -50,7 +50,7 @@
     ]
   },
   "bugs": {
-    "url": "https://github.com/arkanus-app/dice-box-erpg/issues"
+    "url": "https://github.com/erpg-app/Dice3DViewer/issues"
   },
   "description": "TypeScript 3D presentation layer for externally resolved dice results: dependency-free WebGL renderer and deterministic dice physics.",
   "files": [
@@ -67,7 +67,7 @@
   "files-dev": [
     "src"
   ],
-  "homepage": "https://github.com/arkanus-app/dice-box-erpg",
+  "homepage": "https://github.com/erpg-app/Dice3DViewer",
   "keywords": [
     "3D",
     "dice",

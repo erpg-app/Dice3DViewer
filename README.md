@@ -60,7 +60,7 @@ npm install @erpg/dice3dview
 Para consumir diretamente uma tag do repositório:
 
 ```bash
-npm install github:arkanus-app/dice-box-erpg#v3.0.0-alpha.0
+npm install github:erpg-app/Dice3DViewer#v3.0.0-alpha.0
 ```
 
 ```ts
@@ -642,7 +642,7 @@ A partir da 3.0.0 o pacote usa a [Licença de Uso Aberto e Autorizado ERPG](LICE
 - **qualquer outro uso** (produto fechado ou comercial, SaaS com código não
   público, ferramenta interna de empresa) precisa de **autorização por
   escrito** da Arkanus, pedida pelos canais do
-  [repositório](https://github.com/arkanus-app/dice-box-erpg).
+  [repositório](https://github.com/erpg-app/Dice3DViewer).
 
 As versões 1.x e 2.x continuam sob a licença MIT com que foram publicadas.
 

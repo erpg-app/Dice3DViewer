@@ -575,19 +575,19 @@ Upgrade major: mesma API pública, sem Babylon.js e sem Havok. Veja o
 
 - tema `default-v2` consolidado no baseline `81c2ca9` em 30/05/2026.
 
-[Não publicado]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.6.0...HEAD
-[2.6.0]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.2.3...v2.6.0
-[2.5.0]: https://github.com/arkanus-app/dice-box-erpg/commit/7c1462e
-[2.2.3]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.2.2...v2.2.3
-[2.2.2]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.2.1...v2.2.2
-[2.2.1]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.2.0...v2.2.1
-[2.2.0]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.1.1...v2.2.0
-[2.1.1]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.1.0...v2.1.1
-[2.1.0]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.0.5...v2.1.0
-[2.0.5]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.0.4...v2.0.5
-[2.0.4]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.0.3...v2.0.4
-[2.0.3]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.0.2...v2.0.3
-[2.0.2]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.0.1...v2.0.2
-[2.0.1]: https://github.com/arkanus-app/dice-box-erpg/compare/v2.0.0...v2.0.1
-[2.0.0]: https://github.com/arkanus-app/dice-box-erpg/compare/81c2ca948d6de742ea43b836848524a43019d50f...v2.0.0
-[1.0.6]: https://github.com/arkanus-app/dice-box-erpg/commit/81c2ca948d6de742ea43b836848524a43019d50f
+[Não publicado]: https://github.com/erpg-app/Dice3DViewer/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/erpg-app/Dice3DViewer/compare/v2.2.3...v2.6.0
+[2.5.0]: https://github.com/erpg-app/Dice3DViewer/commit/7c1462e
+[2.2.3]: https://github.com/erpg-app/Dice3DViewer/compare/v2.2.2...v2.2.3
+[2.2.2]: https://github.com/erpg-app/Dice3DViewer/compare/v2.2.1...v2.2.2
+[2.2.1]: https://github.com/erpg-app/Dice3DViewer/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/erpg-app/Dice3DViewer/compare/v2.1.1...v2.2.0
+[2.1.1]: https://github.com/erpg-app/Dice3DViewer/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/erpg-app/Dice3DViewer/compare/v2.0.5...v2.1.0
+[2.0.5]: https://github.com/erpg-app/Dice3DViewer/compare/v2.0.4...v2.0.5
+[2.0.4]: https://github.com/erpg-app/Dice3DViewer/compare/v2.0.3...v2.0.4
+[2.0.3]: https://github.com/erpg-app/Dice3DViewer/compare/v2.0.2...v2.0.3
+[2.0.2]: https://github.com/erpg-app/Dice3DViewer/compare/v2.0.1...v2.0.2
+[2.0.1]: https://github.com/erpg-app/Dice3DViewer/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/erpg-app/Dice3DViewer/compare/81c2ca948d6de742ea43b836848524a43019d50f...v2.0.0
+[1.0.6]: https://github.com/erpg-app/Dice3DViewer/commit/81c2ca948d6de742ea43b836848524a43019d50f
