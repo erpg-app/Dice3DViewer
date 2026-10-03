@@ -457,6 +457,11 @@ export interface ViewerOptions {
     readonly aggressiveThrowChance?: number;
     /** @deprecated Use aggressiveThrowChance. This never guarantees a wall collision. */
     readonly wallBounceChance?: number;
+    /**
+     * How far (0..1) the seeded landing spot of a presentation may move away from
+     * the table center. 0 keeps every throw centered; 1 lets it reach any edge.
+     */
+    readonly landingSpread?: number;
     readonly wallPadding?: number;
     readonly colliderScale?: number;
     readonly spawnSpacing?: number;

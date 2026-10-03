@@ -164,6 +164,7 @@ export const createViewerOptions = (options: ViewerOptions): RequiredViewerOptio
 	throwForce: options.throwForce ?? 6.4,
 	aggressiveThrowChance: options.aggressiveThrowChance ?? options.wallBounceChance ?? 0.12,
 	wallBounceChance: options.wallBounceChance ?? options.aggressiveThrowChance ?? 0.12,
+	landingSpread: options.landingSpread ?? 0,
 	wallPadding: options.wallPadding ?? 0.25,
 	colliderScale: options.colliderScale ?? 1.02,
 	spawnSpacing: options.spawnSpacing ?? 1.72,
@@ -229,6 +230,11 @@ export const validateViewerOptions = (options: RequiredViewerOptions): void => {
 		|| options.aggressiveThrowChance < 0
 		|| options.aggressiveThrowChance > 1) {
 		throw new Error('Viewer option aggressiveThrowChance must be between 0 and 1.')
+	}
+	if(!Number.isFinite(options.landingSpread)
+		|| options.landingSpread < 0
+		|| options.landingSpread > 1) {
+		throw new Error('Viewer option landingSpread must be between 0 and 1.')
 	}
 	assertBoolean(options.enableShadows, 'enableShadows')
 	assertBoolean(options.antialias, 'antialias')

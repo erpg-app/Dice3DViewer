@@ -522,6 +522,7 @@ export class SceneRenderer implements DisplayRenderer {
 			spinForce: options.spinForce,
 			delay: options.delay,
 			aggressiveThrowChance: options.aggressiveThrowChance,
+			landingSpread: options.landingSpread,
 			wallPadding: options.wallPadding,
 			gravity: options.gravity,
 			friction: options.friction,

@@ -67,6 +67,25 @@ export const selectPresentationLaunchEdge = (
 	]!
 }
 
+/** Seeded shift of a presentation's landing cluster, as a fraction (-1..1) of
+ * the free room left on each axis once the cluster fits the table. */
+export interface LandingOffset {
+	readonly x: number
+	readonly z: number
+}
+
+const CENTERED_LANDING: LandingOffset = Object.freeze({ x: 0, z: 0 })
+
+/** One landing spot per presentation; spread 0 keeps the historical centered throw. */
+export const selectPresentationLandingOffset = (seed: string, spread: number): LandingOffset => {
+	const amount = Number.isFinite(spread) ? clampValue(spread, 0, 1) : 0
+	if(amount <= 0) return CENTERED_LANDING
+	// Isolated stream: the landing spot never changes the established seeded
+	// landing, yaw or spin sequence.
+	const random = createSeededRandom(`${seed}:landing-offset`)
+	return { x: random.range(-1, 1) * amount, z: random.range(-1, 1) * amount }
+}
+
 export interface TrajectoryLayoutInput {
 	readonly index: number
 	readonly count: number
@@ -79,6 +98,7 @@ export interface TrajectoryLayoutInput {
 	readonly spawnSpacing: number
 	readonly spawnHeightStep: number
 	readonly spawnOverscan: number
+	readonly landingOffset?: LandingOffset | undefined
 }
 
 export interface LaunchPacking {
@@ -215,10 +235,14 @@ export const createScatteredLanding = (
 	const centerBounds = getHorizontalCenterBounds(input.bounds, input.objectRadius)
 	const availableX = Math.max(0, (centerBounds.maxX - centerBounds.minX) / 2)
 	const availableZ = Math.max(0, (centerBounds.maxZ - centerBounds.minZ) / 2)
+	const fitX = Math.min(1, availableX / Math.max(0.01, maximumRawRadius))
+	const fitZ = Math.min(1, availableZ / Math.max(0.01, maximumRawRadius))
+	// The whole cluster moves together, only as far as the room it leaves free.
+	const offset = input.landingOffset ?? CENTERED_LANDING
 	const landing = new Point3(
-		rawX * Math.min(1, availableX / Math.max(0.01, maximumRawRadius)),
+		rawX * fitX + offset.x * Math.max(0, availableX - maximumRawRadius * fitX),
 		input.coin ? input.scale * 0.01 : input.scale * 0.12,
-		rawZ * Math.min(1, availableZ / Math.max(0.01, maximumRawRadius))
+		rawZ * fitZ + offset.z * Math.max(0, availableZ - maximumRawRadius * fitZ)
 	)
 	clampHorizontalPosition(landing, input.bounds, input.objectRadius)
 	return landing
@@ -347,6 +371,7 @@ export interface LaunchPlanInput {
 	readonly supportHeight: number
 	readonly bounds: DisplayViewportBounds
 	readonly launchEdge: LaunchEdge
+	readonly landingOffset?: LandingOffset
 	readonly dynamics: PresentationLaunchDynamics
 	readonly random: ReturnType<typeof createSeededRandom>
 	readonly options: {
@@ -385,7 +410,8 @@ export const planLaunch = (input: LaunchPlanInput): LaunchPlan => {
 		launchEdge: input.launchEdge,
 		spawnSpacing: input.options.spawnSpacing,
 		spawnHeightStep: input.options.spawnHeightStep,
-		spawnOverscan: input.options.spawnOverscan
+		spawnOverscan: input.options.spawnOverscan,
+		landingOffset: input.landingOffset
 	}
 	const end = createScatteredLanding(layout, input.random)
 	end.y = input.supportHeight

@@ -10,6 +10,7 @@ import {
 	createPresentationLaunchDynamics,
 	createLaunchPacking,
 	hasEnteredLaunchPortal,
+	selectPresentationLandingOffset,
 	selectPresentationLaunchEdge,
 	type TrajectoryLayoutInput
 } from './engine/launch'
@@ -573,5 +574,64 @@ describe('natural presentation layout', () => {
 		const verticalHalfSpan = DISPLAY_CAMERA_HEIGHT * Math.tan(DISPLAY_CAMERA_FOV / 2)
 		assert.ok(verticalHalfSpan > 4.1)
 		assert.ok(verticalHalfSpan < 4.4)
+	})
+})
+describe('landing spread', () => {
+	const layoutFor = (seed: string, spread: number, width = 1752, height = 942, count = 2) => {
+		const random = createSeededRandom(seed)
+		const bounds = createBounds(width, height)
+		const landingOffset = selectPresentationLandingOffset(seed, spread)
+		return Array.from({ length: count }, (_, index) => createScatteredLanding({
+			index,
+			count,
+			scale: DEFAULT_SCALE,
+			startingHeight: DEFAULT_STARTING_HEIGHT,
+			coin: false,
+			objectRadius: OBJECT_RADIUS,
+			bounds,
+			launchEdge: selectPresentationLaunchEdge(seed, width, height),
+			spawnSpacing: DEFAULT_SPAWN_SPACING,
+			spawnHeightStep: 0,
+			spawnOverscan: 0.15,
+			landingOffset
+		}, random))
+	}
+
+	it('keeps the historical centered landing at spread 0', () => {
+		for(let index = 0; index < 40; index += 1) {
+			const seed = `centered-${index}`
+			const random = createSeededRandom(seed)
+			const bounds = createBounds(1752, 942)
+			const legacy = createScatteredLanding({
+				index: 0, count: 2, scale: DEFAULT_SCALE, startingHeight: DEFAULT_STARTING_HEIGHT,
+				coin: false, objectRadius: OBJECT_RADIUS, bounds,
+				launchEdge: selectPresentationLaunchEdge(seed, 1752, 942),
+				spawnSpacing: DEFAULT_SPAWN_SPACING, spawnHeightStep: 0, spawnOverscan: 0.15
+			}, random)
+			assert.deepEqual(layoutFor(seed, 0)[0], legacy)
+		}
+	})
+
+	it('reaches every side of a wide table and stays inside the barriers', () => {
+		const bounds = createBounds(1752, 942)
+		const centers = getHorizontalCenterBounds(bounds, OBJECT_RADIUS)
+		let minX = Infinity
+		let maxX = -Infinity
+		for(let index = 0; index < 200; index += 1) {
+			for(const landing of layoutFor(`spread-${index}`, 1)) {
+				assertInside(landing, bounds, OBJECT_RADIUS, `spread landing ${index}`)
+				minX = Math.min(minX, landing.x)
+				maxX = Math.max(maxX, landing.x)
+			}
+		}
+		assert.ok(minX < centers.minX * 0.8, `leftmost landing ${minX.toFixed(2)} of ${centers.minX.toFixed(2)}`)
+		assert.ok(maxX > centers.maxX * 0.8, `rightmost landing ${maxX.toFixed(2)} of ${centers.maxX.toFixed(2)}`)
+	})
+
+	it('moves the whole presentation together', () => {
+		const [first, second] = layoutFor('together', 1)
+		const [centeredFirst, centeredSecond] = layoutFor('together', 0)
+		assert.ok(Math.abs((first!.x - second!.x) - (centeredFirst!.x - centeredSecond!.x)) < 1e-9)
+		assert.ok(Math.abs((first!.z - second!.z) - (centeredFirst!.z - centeredSecond!.z)) < 1e-9)
 	})
 })

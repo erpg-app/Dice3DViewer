@@ -34,7 +34,7 @@ const shapeOf = (type: string): DiceShape => {
 
 const OPTIONS: ThrowOptions = {
 	width: 1200, height: 700, scale: 5, startingHeight: 7.6, spawnSpacing: 1.72, spawnHeightStep: 0,
-	spawnOverscan: 0.15, throwForce: 6.4, spinForce: 5.8, delay: 10, aggressiveThrowChance: 0.12,
+	spawnOverscan: 0.15, throwForce: 6.4, spinForce: 5.8, delay: 10, aggressiveThrowChance: 0.12, landingSpread: 0,
 	wallPadding: 0.25, gravity: 1.3, friction: 0.54, restitution: 0.29, linearDamping: 0.1, angularDamping: 0.08,
 	settleTimeout: 4200, burstHeight: 1.6, spread: 0.8
 }

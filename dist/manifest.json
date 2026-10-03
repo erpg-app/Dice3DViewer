@@ -14,7 +14,7 @@
     "src": "src/render/particlePresets.ts"
   },
   "src/render/particles.ts": {
-    "file": "chunks/particles-f3ed2a4d.js",
+    "file": "chunks/particles-4db139ce.js",
     "imports": [
       "src/index.ts"
     ],

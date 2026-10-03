@@ -16,7 +16,10 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 - momento `link`: energia entre cada par de dados (partículas no meio do par,
   viradas ao longo dele e do tamanho da distância) enquanto rolam e
   `linkSeconds` depois; `linkDistance` limita o alcance;
-- presets `lightning` (com raios entre os dados), `blizzard` e `hearts`.
+- presets `lightning` (com raios entre os dados), `blizzard` e `hearts`;
+- `landingSpread` (`0–1`, default `0`): desloca o aglomerado de pouso de
+  cada apresentação para um ponto seedado da mesa, em vez de mirar sempre o
+  centro. Com `0` nada muda; em mesas largas, `1` usa a mesa inteira.
 
 ### Corrigido
 

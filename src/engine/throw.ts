@@ -1,7 +1,7 @@
 import { createSeededRandom } from '../random'
 import { computeDisplayViewportBounds, type DisplayViewportBounds } from '../renderers/viewportBounds'
 import { DISPLAY_CAMERA_FOV, DISPLAY_CAMERA_HEIGHT } from '../renderers/sceneEnvironment'
-import { createPresentationLaunchDynamics, planLaunch, selectPresentationLaunchEdge, type LaunchEdge, type LaunchPlan } from './launch'
+import { createPresentationLaunchDynamics, planLaunch, selectPresentationLandingOffset, selectPresentationLaunchEdge, type LaunchEdge, type LaunchPlan } from './launch'
 import { supportHeight, type DiceShape } from './shape'
 import type { ReadonlyQuat, ReadonlyVec3 } from './vector'
 
@@ -30,6 +30,7 @@ export interface ThrowOptions {
 	readonly spinForce: number
 	readonly delay: number
 	readonly aggressiveThrowChance: number
+	readonly landingSpread: number
 	readonly wallPadding: number
 	readonly gravity: number
 	readonly friction: number
@@ -61,6 +62,7 @@ export const planThrow = (bodies: readonly ThrowBody[], seed: string, options: T
 	const random = createSeededRandom(seed)
 	const edge = selectPresentationLaunchEdge(seed, options.width, options.height)
 	const dynamics = createPresentationLaunchDynamics(seed, options.aggressiveThrowChance)
+	const landingOffset = selectPresentationLandingOffset(seed, options.landingSpread)
 	const launches = bodies.map((body, index) => planLaunch({
 		seed,
 		index,
@@ -70,6 +72,7 @@ export const planThrow = (bodies: readonly ThrowBody[], seed: string, options: T
 		supportHeight: supportHeight(body.shape, body.canonicalTarget),
 		bounds: stageBounds(options, body.shape.radius),
 		launchEdge: edge,
+		landingOffset,
 		dynamics,
 		random,
 		options

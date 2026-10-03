@@ -385,6 +385,7 @@ O centro inicial é colocado além da projeção no plano da altura de lançamen
 | `throwForce` | `number` | `6.4` | alcance do lançamento e força das explosões |
 | `aggressiveThrowChance` | `number` | `0.12` | chance seedada por apresentação, entre `0` e `1`, de usar a cauda de maior energia; não seleciona paredes |
 | `wallBounceChance` | `number` | alias deprecated | compatibilidade para `aggressiveThrowChance` |
+| `landingSpread` | `number` | `0` | quanto (`0–1`) o ponto de pouso seedado de cada apresentação pode se afastar do centro da mesa; `0` mantém o arremesso centrado, `1` alcança qualquer borda |
 | `colliderScale` | `number` | `1.02` | escala do collider dos poliedros; não altera a moeda |
 | `friction` | `number` | `0.54` | atrito do piso |
 | `restitution` | `number` | `0.29` | elasticidade do piso |
