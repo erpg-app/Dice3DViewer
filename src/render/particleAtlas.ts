@@ -1,6 +1,6 @@
 import { PARTICLE_MOMENTS } from '../particleOptions'
 import type { ParticleEffectDefinition } from '../types'
-import { loadImage } from './assets'
+import { createTextureCanvas, getImageSize, getTextureContext, loadImage, type ImageLoader, type RenderImage } from './images'
 
 const GRID = 4
 const CELL = 256
@@ -23,21 +23,22 @@ export interface ParticleAtlasSource {
  * grid is full, slots of images the current effect does not use are reused.
  */
 export class ParticleAtlas implements ParticleAtlasSource {
-	readonly source: HTMLCanvasElement
+	readonly source: HTMLCanvasElement | OffscreenCanvas
 	version = 0
-	readonly #context: CanvasRenderingContext2D
+	readonly #context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+	readonly #loadImage: ImageLoader
 	readonly #slots = new Map<string, number>()
 	readonly #owners: (string | null)[] = new Array<string | null>(PARTICLE_ATLAS_SLOTS).fill(null)
 	#inUse: ReadonlySet<string> = new Set()
 	readonly #onChange: () => void
 
-	constructor(onChange: () => void) {
-		this.source = document.createElement('canvas')
-		this.source.width = this.source.height = GRID * CELL
-		const context = this.source.getContext('2d')
+	constructor(onChange: () => void, imageLoader: ImageLoader = loadImage) {
+		this.source = createTextureCanvas(GRID * CELL, GRID * CELL)
+		const context = getTextureContext(this.source)
 		if(!context) throw new Error('Unable to create the particle image atlas.')
 		this.#context = context
 		this.#onChange = onChange
+		this.#loadImage = imageLoader
 	}
 
 	/** Gives a slot to every image of the effect (starting their download). */
@@ -59,7 +60,7 @@ export class ParticleAtlas implements ParticleAtlasSource {
 		this.#owners[slot] = url
 		this.#slots.set(url, slot)
 		this.#clear(slot)
-		loadImage(url)
+		this.#loadImage(url)
 			.then(image => { if(this.#owners[slot] === url) this.#paint(slot, image) })
 			.catch(() => { if(this.#owners[slot] === url) this.#paint(slot, null) })
 		return slot
@@ -72,14 +73,15 @@ export class ParticleAtlas implements ParticleAtlasSource {
 	}
 
 	/** Draws an image centered in its cell (kept in proportion), or a soft glow for a broken one. */
-	#paint(slot: number, image: HTMLImageElement | null): void {
+	#paint(slot: number, image: RenderImage | null): void {
 		const context = this.#context
 		const x = (slot % GRID) * CELL + INSET, y = Math.floor(slot / GRID) * CELL + INSET
 		const box = CELL - INSET * 2
 		context.clearRect(x - INSET, y - INSET, CELL, CELL)
-		if(image && image.naturalWidth > 0 && image.naturalHeight > 0) {
-			const scale = box / Math.max(image.naturalWidth, image.naturalHeight)
-			const width = image.naturalWidth * scale, height = image.naturalHeight * scale
+		const size = image && getImageSize(image)
+		if(image && size && size.width > 0 && size.height > 0) {
+			const scale = box / Math.max(size.width, size.height)
+			const width = size.width * scale, height = size.height * scale
 			context.drawImage(image, x + (box - width) / 2, y + (box - height) / 2, width, height)
 		} else {
 			const glow = context.createRadialGradient(x + box / 2, y + box / 2, 0, x + box / 2, y + box / 2, box / 2)

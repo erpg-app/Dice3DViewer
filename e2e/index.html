@@ -33,11 +33,18 @@
         }
       }
 
-      const runDisplay = async ({ enableShadows = false, sides, values }) => {
-        const viewer = createViewer({ enableShadows })
+      const runDisplay = async ({ enableShadows = false, sides, values, options, resize = false, update }) => {
+        const viewer = createViewer({ enableShadows, ...options })
+        const originalCanvas = viewer.canvas
+        const stage = document.querySelector('#stage')
         const initStarted = performance.now()
         await viewer.init()
         const initMs = performance.now() - initStarted
+        if(update) await viewer.updateOptions(update)
+        if(resize) {
+          stage.style.width = '75%'
+          viewer.resize()
+        }
         const displayStarted = performance.now()
         const result = await viewer.display({
           id: `d${sides}-${values.length}`,
@@ -46,13 +53,26 @@
         const displayMs = performance.now() - displayStarted
         assertFaces(result, values)
         if(!viewer.canvas.isConnected) throw new Error('Viewer canvas was not attached.')
+        if(resize && viewer.canvas.width !== Math.round(viewer.canvas.clientWidth * Math.min(2, devicePixelRatio))) {
+          throw new Error('Viewer did not resize the backing canvas.')
+        }
+        let backend = 'main'
+        try {
+          if(!viewer.canvas.getContext('webgl2') && !viewer.canvas.getContext('webgl')) throw new Error('Missing WebGL context.')
+        } catch(error) {
+          if(error.name !== 'InvalidStateError') throw error
+          backend = 'worker'
+        }
+        const replacedCanvas = originalCanvas !== viewer.canvas
         viewer.dispose()
+        stage.style.width = ''
         if(viewer.canvas.isConnected) throw new Error('dispose() did not remove the canvas.')
-        return { initMs, displayMs }
+        return { initMs, displayMs, backend, replacedCanvas }
       }
 
       const runTimeline = async () => {
-        const viewer = createViewer({ enableShadows: false })
+        const progress = []
+        const viewer = createViewer({ enableShadows: false, onTimelineProgress: event => progress.push(event) })
         await viewer.init()
         const result = await viewer.displayTimeline({
           id: 'timeline-d6',
@@ -70,6 +90,9 @@
         })
         assertFaces(result, [6])
         if(result.eventCount !== 1) throw new Error('Timeline event count mismatch.')
+        if(progress.at(-1)?.stage !== 'complete' || !Object.isFrozen(progress.at(-1)?.dice)) {
+          throw new Error('Expected a complete, immutable timeline progress snapshot.')
+        }
         viewer.dispose()
       }
 

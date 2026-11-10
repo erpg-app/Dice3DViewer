@@ -27,6 +27,7 @@ import {
 } from './sceneEnvironment'
 import { DiceGL, lookAt, multiply, perspective, type DrawState, type FrameSetup, type GLMesh, type ParticleShaders, type SurfaceMaterial } from '../render/gl'
 import { AssetLibrary, parseHexColor, type CoinGeometry, type ModelDieType } from '../render/assets'
+import type { ImageLoader } from '../render/images'
 import { getCoinAccentColor, getCoinTargetQuaternion } from '../render/coinTheme'
 import { faceTargetQuaternion, type DiceShape } from '../engine/shape'
 import { sampleTrack, type Track } from '../engine/track'
@@ -43,7 +44,7 @@ import { normalize, qmul, quatFromAxisAngle, type Quat, type Vec3 } from '../eng
 import type { SimulationMarker } from '../engine/simulation'
 import type { ParticleSystem } from '../render/particles'
 import { parseParticleColor } from '../particleOptions'
-import { loadParticlePresets } from '../particlePresetLoader'
+import { loadModule } from '../loadModule'
 
 type PolyhedronVisual = {
 	readonly kind: 'polyhedron'
@@ -122,6 +123,15 @@ interface PlaybackHandlers {
 	readonly still?: ReadonlySet<number>
 }
 
+interface SceneContext extends Omit<RendererContext, 'canvas'> {
+	readonly canvas: HTMLCanvasElement | OffscreenCanvas
+	readonly viewport?: { readonly width: number; readonly height: number; readonly pixelRatio: number }
+	readonly imageLoader?: ImageLoader
+	readonly assetBaseUrl?: string
+	readonly prefersReducedMotion?: () => boolean
+	readonly notifyThemeLoaded?: (theme: ResolvedThemeConfig) => Promise<void>
+}
+
 /** Per-geometry mass profile of the v2 physics calibration. */
 const TYPE_MASS: Readonly<Record<number, number>> = { 2: 0.7, 4: 0.82, 6: 1, 8: 0.92, 10: 0.88, 12: 1.08, 20: 1.18, 100: 0.88 }
 /** Discarded dice keep their opacity and lose color, so the kept ones stand out. */
@@ -156,7 +166,7 @@ const lightColor = (hex: string): Vec3 => {
  */
 export class SceneRenderer implements DisplayRenderer {
 	readonly mode = 'physics' as const
-	#context: RendererContext | undefined
+	#context: SceneContext | undefined
 	#options: Readonly<RequiredViewerOptions> | undefined
 	#gl: DiceGL | undefined
 	#assets: AssetLibrary | undefined
@@ -179,6 +189,7 @@ export class SceneRenderer implements DisplayRenderer {
 	#particleSeed = 'particles'
 	#frameRequest: number | null = null
 	#ambientRequest: number | null = null
+	#frame: (FrameSetup & { readonly aspect: number; readonly lightIntensity: number }) | undefined
 	/** Animation loops currently rendering every frame. */
 	#running = 0
 	#generation = 0
@@ -187,15 +198,16 @@ export class SceneRenderer implements DisplayRenderer {
 	/** A lost WebGL context is being rebuilt: nothing is drawn meanwhile. */
 	#restoring = false
 
-	async init(context: RendererContext): Promise<void> {
+	async init(context: SceneContext): Promise<void> {
 		if(this.#gl) return
 		this.#context = context
 		this.#options = context.options
 		this.#gl = new DiceGL(context.canvas, context.options.antialias, () => void this.#restore())
-		this.#assets = new AssetLibrary(this.#gl)
-		const width = Math.max(1, context.canvas.clientWidth || context.canvas.parentElement?.clientWidth || 300)
-		const height = Math.max(1, context.canvas.clientHeight || context.canvas.parentElement?.clientHeight || 150)
-		this.resize(width, height)
+		this.#assets = new AssetLibrary(this.#gl, context.imageLoader, context.assetBaseUrl)
+		const canvas = context.canvas
+		const width = 'clientWidth' in canvas ? canvas.clientWidth || canvas.parentElement?.clientWidth || 300 : canvas.width
+		const height = 'clientHeight' in canvas ? canvas.clientHeight || canvas.parentElement?.clientHeight || 150 : canvas.height
+		this.resize(context.viewport?.width ?? width, context.viewport?.height ?? height, context.viewport?.pixelRatio)
 	}
 
 	async display(request: NormalizedDisplayRequest, signal: AbortSignal): Promise<void> {
@@ -221,6 +233,7 @@ export class SceneRenderer implements DisplayRenderer {
 		if(signal.aborted) throw new DisplayCancelledError()
 		const configs = await this.#loadThemes([...plan.definitions.values()].map(definition => definition.theme))
 		if(signal.aborted) throw new DisplayCancelledError()
+		if(signal.aborted) throw new DisplayCancelledError()
 		const options = this.#options!
 		const progress = createTimelineProgressTracker(plan)
 		const handles = new Map<string, Handle>()
@@ -228,6 +241,7 @@ export class SceneRenderer implements DisplayRenderer {
 			const handle = await this.#createHandle(die as NormalizedResolvedDie, configs.get(die.theme!)!)
 			handles.set(die.id, handle)
 		}
+		if(signal.aborted) throw new DisplayCancelledError()
 		const initialEntries = [...handles.values()].flatMap(handle => handle.entries)
 		this.#entries = [...initialEntries]
 		let explosionPhaseCount = 0
@@ -300,11 +314,11 @@ export class SceneRenderer implements DisplayRenderer {
 		this.#ambient()
 	}
 
-	resize(width: number, height: number): void {
+	resize(width: number, height: number, pixelRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1): void {
 		if(!this.#context) return
 		this.#width = Math.max(1, width)
 		this.#height = Math.max(1, height)
-		const ratio = typeof window === 'undefined' ? 1 : Math.min(2, window.devicePixelRatio || 1)
+		const ratio = Math.min(2, pixelRatio)
 		this.#context.canvas.width = Math.max(1, Math.round(this.#width * ratio))
 		this.#context.canvas.height = Math.max(1, Math.round(this.#height * ratio))
 		this.#requestRender()
@@ -340,6 +354,7 @@ export class SceneRenderer implements DisplayRenderer {
 	#reducedMotion(): boolean {
 		const mode = this.#options?.reducedMotion ?? 'auto'
 		if(mode !== 'auto') return mode === 'always'
+		if(this.#context?.prefersReducedMotion) return this.#context.prefersReducedMotion()
 		return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 	}
 
@@ -383,22 +398,31 @@ export class SceneRenderer implements DisplayRenderer {
 	async #prepareParticles(seed: string): Promise<void> {
 		this.#particleSeed = seed
 		const options = this.#options!.particles
-		if(options && !this.#particles) {
-			const engine = await import('../render/particles')
-			this.#particleAtlas ??= new engine.ParticleAtlas(() => this.#requestRender())
-			const atlas = this.#particleAtlas
-			this.#particles ??= new engine.ParticleSystem(url => atlas.slot(url))
+		if(!options || this.#reducedMotion()) {
+			this.#particleAtlas?.prepare(null)
+			this.#particles?.configure(null, options?.intensity ?? 1, seed)
+			return
+		}
+		const urls = this.#context!.effects
+		const [engine, presets] = await Promise.all([
+			this.#particles ? null : loadModule<typeof import('../render/particles')>(urls.particles),
+			options.preset && !options.effect
+				? loadModule<typeof import('../render/particlePresets')>(urls.presets)
+				: null
+		])
+		// Options may have changed while the chunks were loading.
+		if(this.#options!.particles !== options) return
+		if(engine && !this.#particles) {
+			const atlas = new engine.ParticleAtlas(() => this.#requestRender(), this.#context?.imageLoader)
+			this.#particleAtlas = atlas
+			this.#particles = new engine.ParticleSystem(url => atlas.slot(url))
 			this.#customizeEffect = engine.customizeEffect
 			this.#particleShaders = { vertex: engine.PARTICLE_VERTEX, fragment: engine.PARTICLE_FRAGMENT }
 		}
-		// A full definition wins; preset names load the preset chunk on first use.
-		// Reduced motion plays no particles at all.
-		const base = this.#reducedMotion() ? null : options?.effect ?? (options?.preset ? (await loadParticlePresets())[options.preset] : null)
-		const effect = options && base && this.#customizeEffect ? this.#customizeEffect(base, options) : null
-		// Options may have changed while the chunks were loading.
-		if(this.#options!.particles !== options) return
+		const base = options.effect ?? (options.preset ? presets?.PARTICLE_PRESETS[options.preset] : null)
+		const effect = base && this.#customizeEffect && !this.#reducedMotion() ? this.#customizeEffect(base, options) : null
 		this.#particleAtlas?.prepare(effect)
-		this.#particles?.configure(effect, options?.intensity ?? 1, seed)
+		this.#particles?.configure(effect, options.intensity ?? 1, seed)
 	}
 
 	// ---------- scene construction ----------
@@ -409,7 +433,8 @@ export class SceneRenderer implements DisplayRenderer {
 			const config = await this.#context!.loadTheme(theme)
 			configs.set(theme, config)
 			await this.#assets!.loadModel(config.meshFilePath)
-			this.#options!.onThemeLoaded(config)
+			if(this.#context!.notifyThemeLoaded) await this.#context!.notifyThemeLoaded(config)
+			else this.#options!.onThemeLoaded(config)
 		}
 		return configs
 	}
@@ -1070,13 +1095,19 @@ export class SceneRenderer implements DisplayRenderer {
 		const reduced = this.#reducedMotion()
 		const now = performance.now()
 		const aspect = canvas.width / Math.max(1, canvas.height)
-		const eye: Vec3 = [0, DISPLAY_CAMERA_HEIGHT, 0]
-		const frame: FrameSetup = {
-			viewProjection: multiply(perspective(DISPLAY_CAMERA_FOV, aspect, 1, 80), lookAt(eye, [0, 0, 0], [0, 0, -1])),
-			eye,
-			lightDirection: normalize(DISPLAY_LIGHT_DIRECTION),
-			directionalIntensity: DISPLAY_DIRECTIONAL_INTENSITY * options.lightIntensity,
-			hemisphericIntensity: DISPLAY_HEMISPHERIC_INTENSITY * options.lightIntensity
+		const lightIntensity = options.lightIntensity
+		let frame = this.#frame
+		if(!frame || frame.aspect !== aspect || frame.lightIntensity !== lightIntensity) {
+			const eye: Vec3 = [0, DISPLAY_CAMERA_HEIGHT, 0]
+			frame = {
+				aspect, lightIntensity,
+				viewProjection: multiply(perspective(DISPLAY_CAMERA_FOV, aspect, 1, 80), lookAt(eye, [0, 0, 0], [0, 0, -1])),
+				eye,
+				lightDirection: normalize(DISPLAY_LIGHT_DIRECTION),
+				directionalIntensity: DISPLAY_DIRECTIONAL_INTENSITY * lightIntensity,
+				hemisphericIntensity: DISPLAY_HEMISPHERIC_INTENSITY * lightIntensity
+			}
+			this.#frame = frame
 		}
 		gl.beginFrame(canvas.width, canvas.height)
 		const customGlow = options.glow?.color ? parseParticleColor(options.glow.color) : null

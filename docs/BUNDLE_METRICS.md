@@ -2,10 +2,9 @@
 
 [← Voltar ao README](../README.md)
 
-A v3 é um único módulo ES sem dependências de runtime: renderizador WebGL,
-motor de física, timeline, skins, temas e adaptadores. O motor de partículas e
-seus presets são o único chunk à parte, importado dinamicamente só quando a
-opção `particles` é usada. Os números versionados estão em
+A v3 distribui um módulo ES sem dependências de runtime. O Worker e o
+fallback compartilham o mesmo arquivo de física e WebGL. Os dois carregam o
+motor de partículas e os presets sob demanda. Os números históricos estão em
 [`bundle-baseline.json`](../benchmarks/bundle-baseline.json); os da v2 foram
 preservados em [`bundle-baseline-v2.json`](../benchmarks/bundle-baseline-v2.json)
 para comparação.
@@ -25,20 +24,17 @@ pacote npm (`npm pack --dry-run`).
 
 `bundle:check` valida a topologia e os orçamentos:
 
-- a biblioteca é um único módulo; o único chunk é o de partículas, carregado por `import()` e fora do grafo estático;
+- o renderizador compartilhado e os efeitos ficam fora do grafo estático;
 - nenhum JavaScript referencia Babylon, Havok ou `.wasm`, e `dist` não contém WebAssembly;
 - `package.json` não declara dependências de runtime e todos os exports existem;
 - `adapters` não contém código de renderização;
-- biblioteca até 45 KB gzip, motor de partículas até 6 KB, presets até 5 KB e `adapters` até 3 KB gzip;
-- o motor de partículas não importa os presets estaticamente: um efeito dado como definição completa (um visual da oficina) não baixa os presets.
+- módulo principal até 15 KiB gzip, renderizador até 36 KiB, motor de partículas até 8 KiB, presets até 5 KiB e `adapters` até 3 KiB;
+- definições completas de efeitos carregam só o motor de partículas. Usar um preset carrega também o arquivo de presets.
 
-O build compacta a saída: o Vite mantém os espaços em builds ES de biblioteca
-(por causa das anotações `/* @__PURE__ */`), mas a biblioteca é um único módulo
-sem tree-shaking a preservar, então `vite.config.ts` remove espaços dos chunks
-finais e comentários/indentação dos shaders GLSL. O shader de partículas viaja
-com o chunk de partículas e só é compilado no primeiro efeito.
+O build remove espaços dos chunks finais e compacta os shaders GLSL. O shader
+de partículas é compilado no primeiro efeito.
 
-## Resultado da 3.0.0-alpha.0
+## Medição inicial da 3.0.0-alpha.0
 
 | Artefato | Arquivos | Raw | Gzip | Brotli |
 |---|---:|---:|---:|---:|

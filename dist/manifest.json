@@ -1,25 +1,20 @@
 {
+  "particlePresets.js": {
+    "file": "chunks/particlePresets-273b1da4.js",
+    "src": "particlePresets.js"
+  },
+  "particles.js": {
+    "file": "chunks/particles-cc9ecc39.js",
+    "src": "particles.js"
+  },
+  "sceneWorker.js": {
+    "file": "chunks/sceneWorker-3084e26a.js",
+    "src": "sceneWorker.js"
+  },
   "src/index.ts": {
-    "dynamicImports": [
-      "src/render/particlePresets.ts",
-      "src/render/particles.ts"
-    ],
     "file": "dice3dview.es.js",
     "isEntry": true,
     "src": "src/index.ts"
-  },
-  "src/render/particlePresets.ts": {
-    "file": "chunks/particlePresets-d5a8a3d9.js",
-    "isDynamicEntry": true,
-    "src": "src/render/particlePresets.ts"
-  },
-  "src/render/particles.ts": {
-    "file": "chunks/particles-4db139ce.js",
-    "imports": [
-      "src/index.ts"
-    ],
-    "isDynamicEntry": true,
-    "src": "src/render/particles.ts"
   },
   "style.css": {
     "file": "dice3dview.css",

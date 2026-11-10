@@ -24,8 +24,7 @@ const compressedMetrics = files => [...new Set(files)].filter(existsSync).reduce
 const readManifest = () => JSON.parse(readFileSync(path.join(dist, 'manifest.json'), 'utf8'))
 
 /** Files reached through static imports from the given manifest roots. */
-export const staticClosure = roots => {
-	const manifest = readManifest()
+export const staticClosure = (roots, manifest = readManifest()) => {
 	const files = new Set()
 	const visited = new Set()
 	const walk = key => {
@@ -56,16 +55,14 @@ const packageMetrics = () => {
 }
 
 export const collectBundleMetrics = ({ includePackage = false } = {}) => {
-	// The static graph serves every presentation (physics included); the particle
-	// engine loads with the first effect and the presets with the first preset name.
-	const library = staticClosure(['src/index.ts'])
-	const particles = [...staticClosure(['src/render/particles.ts'])].filter(file => !library.has(file))
-	const presets = [...staticClosure(['src/render/particlePresets.ts'])].filter(file => !library.has(file) && !particles.includes(file))
+	const manifest = readManifest()
+	const measure = entry => compressedMetrics([...staticClosure([entry], manifest)])
 	const allJavaScript = visit(dist).filter(file => file.endsWith('.js') && !file.includes(`${path.sep}adapters${path.sep}`))
 	return {
-		library: compressedMetrics([...library]),
-		particles: compressedMetrics(particles),
-		presets: compressedMetrics(presets),
+		library: measure('src/index.ts'),
+		renderer: measure('sceneWorker.js'),
+		particles: measure('particles.js'),
+		presets: measure('particlePresets.js'),
 		allJavaScript: compressedMetrics(allJavaScript),
 		adapters: compressedMetrics([path.join(dist, 'adapters/index.js')]),
 		assets: compressedMetrics(visit(path.join(dist, 'assets'))),
@@ -79,22 +76,23 @@ if(isMain) {
 	const metrics = collectBundleMetrics({ includePackage: true })
 	const v2 = JSON.parse(readFileSync(path.join(root, 'benchmarks/bundle-baseline-v2.json'), 'utf8'))
 	const v2Physics = key => v2.legacy.initial[key] + v2.legacy.physicsIncremental[key] + v2.havokJs[key] + v2.wasm[key]
+	const v3Initial = key => metrics.library[key] + metrics.renderer[key]
 	const ratio = (before, after) => Number((before / Math.max(1, after)).toFixed(1))
 	const report = {
-		schemaVersion: 3,
+		schemaVersion: 4,
 		capturedAt: new Date().toISOString(),
 		environment: { node: process.versions.node, platform: `${process.platform}-${process.arch}` },
 		...metrics,
 		comparisonWithV2: {
-			// v2 kinematic-only first load vs the whole v3 library (physics included).
+			// v2 kinematic-only first load vs v3 with its worker (physics included).
 			v2KinematicInitial: Object.fromEntries(['rawBytes', 'gzipBytes', 'brotliBytes'].map(key => [key, {
 				v2: v2.legacy.initial[key],
-				v3: metrics.library[key],
-				reduction: ratio(v2.legacy.initial[key], metrics.library[key])
+				v3: v3Initial(key),
+				reduction: ratio(v2.legacy.initial[key], v3Initial(key))
 			}])),
 			// v2 physics mode (Babylon + Havok JS + WASM) vs the whole v3 library.
 			v2PhysicsMode: Object.fromEntries(['rawBytes', 'gzipBytes', 'brotliBytes'].map(key => {
-				const v3 = metrics.library[key]
+				const v3 = v3Initial(key)
 				return [key, { v2: v2Physics(key), v3, reduction: ratio(v2Physics(key), v3) }]
 			}))
 		}

@@ -3,6 +3,7 @@ import { createCoinShape } from './coinTheme'
 import type { ReadonlyVec3, Vec3 } from '../engine/vector'
 import type { CoinTheme, DiceSkinOptions, ResolvedThemeConfig } from '../types'
 import type { DiceGL, GLMesh, GLTexture, SurfaceMaterial } from './gl'
+import { createTextureCanvas, getTextureContext, isSvgImage, loadImage, type ImageLoader, type ImageSize } from './images'
 
 /** Geometry types available in theme models (d100 has its own tens mesh). */
 export const MODEL_DIE_TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'] as const
@@ -45,22 +46,13 @@ const toRightHanded = (values: readonly number[]): Float32Array => {
 	return out
 }
 
-const fetchJson = async <T>(url: string): Promise<T> => {
-	const response = await fetch(url)
+const fetchJson = async <T>(url: string, base?: string): Promise<T> => {
+	const response = await fetch(base ? new URL(url, base) : url)
 	if(!response.ok) throw new Error(`Unable to fetch '${url}' (${response.status} ${response.statusText}).`)
 	const type = response.headers.get('content-type') ?? ''
 	if(type.includes('text/html')) throw new Error(`Expected JSON at '${url}' but the server returned HTML (check assetPath/origin).`)
 	return await response.json() as T
 }
-
-export const loadImage = (url: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-	const image = new Image()
-	image.crossOrigin = 'anonymous'
-	image.decoding = 'async'
-	image.onload = () => resolve(image)
-	image.onerror = () => reject(new Error(`Unable to load image '${url}'.`))
-	image.src = url
-})
 
 const isLightColor = (hex: string): boolean => {
 	const value = hex.replace('#', '')
@@ -92,7 +84,7 @@ const resolveAsset = (basePath: string, value: string): string =>
  * Inverts the brightness of the grey pixels of an artwork (white marks with a
  * dark outline become dark marks with a light outline); colored pixels stay.
  */
-const invertNeutralPixels = (context: CanvasRenderingContext2D, size: number): void => {
+const invertNeutralPixels = (context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, size: number): void => {
 	let image: ImageData
 	try {
 		image = context.getImageData(0, 0, size, size)
@@ -113,6 +105,8 @@ const invertNeutralPixels = (context: CanvasRenderingContext2D, size: number): v
 
 export class AssetLibrary {
 	readonly #gl: DiceGL
+	readonly #loadImage: ImageLoader
+	readonly #baseUrl: string | undefined
 	readonly #models = new Map<string, Promise<LoadedModel>>()
 	readonly #shapes = new Map<string, DiceShape>()
 	readonly #textures = new Map<string, Promise<GLTexture>>()
@@ -121,15 +115,17 @@ export class AssetLibrary {
 	readonly #coinGeometry = new Map<string, CoinGeometry>()
 	readonly #skins = new Map<string, Promise<{ readonly texture: GLTexture; readonly luminance: number }>>()
 
-	constructor(gl: DiceGL) {
+	constructor(gl: DiceGL, imageLoader: ImageLoader = loadImage, baseUrl?: string) {
 		this.#gl = gl
+		this.#loadImage = imageLoader
+		this.#baseUrl = baseUrl
 	}
 
 	loadModel(url: string): Promise<LoadedModel> {
 		const cached = this.#models.get(url)
 		if(cached) return cached
 		const pending = (async (): Promise<LoadedModel> => {
-			const source = await fetchJson<BabylonModelSource>(url)
+			const source = await fetchJson<BabylonModelSource>(url, this.#baseUrl)
 			if(!source.colliderFaceMap) throw new Error(`Dice model '${url}' has no colliderFaceMap.`)
 			const geometry = new Map<ModelDieType, ModelGeometry>()
 			const byName = new Map(source.meshes.map(mesh => [mesh.name, mesh]))
@@ -170,16 +166,15 @@ export class AssetLibrary {
 		return shape
 	}
 
-	loadTexture(url: string, atlasSize?: { readonly width: number; readonly height: number }): Promise<GLTexture> {
+	loadTexture(url: string, atlasSize?: ImageSize): Promise<GLTexture> {
 		const cached = this.#textures.get(url)
 		if(cached) return cached
-		const pending = loadImage(url).then(image => {
-			if(!/\.svg(?:$|\?)/i.test(url)) return this.#gl.createTexture(image)
+		const svg = isSvgImage(url)
+		const pending = this.#loadImage(url, svg ? atlasSize : undefined).then(image => {
+			if(!svg || !('naturalWidth' in image)) return this.#gl.createTexture(image)
 			// SVG atlases are rasterized at their declared atlas size.
-			const surface = document.createElement('canvas')
-			surface.width = atlasSize?.width ?? (image.naturalWidth || 1024)
-			surface.height = atlasSize?.height ?? (image.naturalHeight || 1024)
-			surface.getContext('2d')?.drawImage(image, 0, 0, surface.width, surface.height)
+			const surface = createTextureCanvas(atlasSize?.width ?? (image.naturalWidth || 1024), atlasSize?.height ?? (image.naturalHeight || 1024))
+			getTextureContext(surface)?.drawImage(image, 0, 0, surface.width, surface.height)
 			return this.#gl.createTexture(surface)
 		})
 		this.#textures.set(url, pending)
@@ -194,14 +189,12 @@ export class AssetLibrary {
 	skin(url: string): Promise<{ readonly texture: GLTexture; readonly luminance: number }> {
 		const cached = this.#skins.get(url)
 		if(cached) return cached
-		const pending = loadImage(url).then(image => {
-			const surface = document.createElement('canvas')
-			surface.width = surface.height = 512
-			surface.getContext('2d')?.drawImage(image, 0, 0, 512, 512)
+		const pending = this.#loadImage(url).then(image => {
+			const surface = createTextureCanvas(512, 512)
+			getTextureContext(surface)?.drawImage(image, 0, 0, 512, 512)
 			let luminance = 0.5
-			const probe = document.createElement('canvas')
-			probe.width = probe.height = 16
-			const context = probe.getContext('2d', { willReadFrequently: true })
+			const probe = createTextureCanvas(16, 16)
+			const context = getTextureContext(probe, { willReadFrequently: true })
 			if(context) {
 				context.drawImage(surface, 0, 0, 16, 16)
 				const pixels = context.getImageData(0, 0, 16, 16).data
@@ -302,7 +295,7 @@ export class AssetLibrary {
 		const url = resolveAsset(config.basePath, file)
 		const cached = this.#orientations.get(url)
 		if(cached) return cached
-		const pending = fetchJson<Record<string, Record<string, readonly number[]>>>(url)
+		const pending = fetchJson<Record<string, Record<string, readonly number[]>>>(url, this.#baseUrl)
 			.then(data => new Map(Object.entries(data).map(([type, values]) => [
 				type,
 				new Map(Object.entries(values).map(([value, direction]) => [Number(value), [direction[0] ?? 0, direction[1] ?? 0, direction[2] ?? 0] as Vec3]))
@@ -335,12 +328,11 @@ export class AssetLibrary {
 		if(cached) return cached
 		const pending = (async (): Promise<SurfaceMaterial> => {
 			const url = resolveAsset(config.basePath, coin[face].texture)
-			const image = await loadImage(url).catch(() => null)
+			const image = await this.#loadImage(url, isSvgImage(url) ? { width: 256, height: 256 } : undefined).catch(() => null)
 			const base = parseHexColor(themeColor)
 			const layer = coin.colorize ? await this.#skinLayer(activeSkin, base) : null
-			const surface = document.createElement('canvas')
-			surface.width = surface.height = 256
-			const context = surface.getContext('2d')
+			const surface = createTextureCanvas(256, 256)
+			const context = getTextureContext(surface)
 			if(context) {
 				if(image) context.drawImage(image, 0, 0, 256, 256)
 				else {

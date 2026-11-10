@@ -326,15 +326,18 @@ export class DiceGL {
 	#surfaceFrame: FrameSetup | null = null
 	#haloFrame: FrameSetup | null = null
 	#surfaceMaterial: SurfaceMaterial | null = null
+	#surfaceWinding: number | undefined
+	#opaqueSurface = false
 	#boundMesh: GLMesh | null = null
 	#boundProgram: Program | null = null
 	readonly #rotation = new Float32Array(9)
 
 	/** `onRestore` runs after a lost context comes back and the programs are rebuilt. */
-	constructor(canvas: HTMLCanvasElement, antialias: boolean, onRestore?: () => void) {
+	constructor(canvas: HTMLCanvasElement | OffscreenCanvas, antialias: boolean, onRestore?: () => void) {
 		const attributes: WebGLContextAttributes = { alpha: true, antialias, premultipliedAlpha: true, preserveDrawingBuffer: false, depth: true }
-		const webgl2 = canvas.getContext('webgl2', attributes)
-		const gl = webgl2 ?? canvas.getContext('webgl', attributes) ?? canvas.getContext('experimental-webgl', attributes) as WebGLRenderingContext | null
+		const webgl2 = canvas.getContext('webgl2', attributes) as WebGL2RenderingContext | null
+		const gl = webgl2 ?? (canvas.getContext('webgl', attributes) as WebGLRenderingContext | null)
+			?? ('clientWidth' in canvas ? canvas.getContext('experimental-webgl', attributes) as WebGLRenderingContext | null : null)
 		if(!gl) throw new Error('WebGL is unavailable in this browser.')
 		this.gl = gl
 		this.webgl2 = Boolean(webgl2)
@@ -389,6 +392,7 @@ export class DiceGL {
 		this.#surfaceFrame = null
 		this.#haloFrame = null
 		this.#surfaceMaterial = null
+		this.#surfaceWinding = undefined
 		this.#boundMesh = null
 		this.#boundProgram = null
 	}
@@ -495,6 +499,7 @@ export class DiceGL {
 
 	beginFrame(width: number, height: number): void {
 		const gl = this.gl
+		this.#surfaceWinding = undefined
 		gl.viewport(0, 0, width, height)
 		gl.clearColor(0, 0, 0, 0)
 		gl.depthMask(true)
@@ -504,6 +509,7 @@ export class DiceGL {
 	/** One flat quad per item on the table (shadows, rings and pools of light share it). */
 	#drawQuads(frame: FrameSetup, program: Program, height: number, items: readonly { readonly x: number; readonly z: number; readonly size: number; readonly alpha: number; readonly color?: ReadonlyVec3 }[]): void {
 		if(!items.length) return
+		this.#surfaceWinding = undefined
 		const gl = this.gl
 		const { attributes, uniforms } = program
 		gl.useProgram(program.program)
@@ -545,6 +551,7 @@ export class DiceGL {
 	drawParticles(frame: FrameSetup, data: Float32Array, count: number, additive: boolean, pixelScale: number, shaders: ParticleShaders, time = 0, atlas: ParticleAtlasSource | null = null): void {
 		const instancing = this.#instancing
 		if(count <= 0 || !instancing) return
+		this.#surfaceWinding = undefined
 		const gl = this.gl
 		this.#particle ??= this.#compile(shaders.vertex, shaders.fragment)
 		const { program, attributes, uniforms: u } = this.#particle
@@ -614,11 +621,18 @@ export class DiceGL {
 		const gl = this.gl
 		const surface = this.#surface
 		const u = surface.uniforms
-		gl.useProgram(surface.program)
-		gl.enable(gl.DEPTH_TEST)
-		gl.enable(gl.CULL_FACE)
-		gl.frontFace(mesh.frontFace)
-		gl.cullFace(gl.BACK)
+		// Consecutive surfaces share a program and depth/cull state.
+		if(this.#surfaceWinding === undefined) {
+			gl.useProgram(surface.program)
+			gl.enable(gl.DEPTH_TEST)
+			gl.enable(gl.CULL_FACE)
+			gl.cullFace(gl.BACK)
+			this.#opaqueSurface = false
+		}
+		if(this.#surfaceWinding !== mesh.frontFace) {
+			gl.frontFace(mesh.frontFace)
+			this.#surfaceWinding = mesh.frontFace
+		}
 		if(this.#surfaceFrame !== frame) {
 			this.#surfaceFrame = frame
 			gl.uniformMatrix4fv(u.uViewProj ?? null, false, frame.viewProjection)
@@ -660,13 +674,17 @@ export class DiceGL {
 		gl.uniform3f(u.uEmission ?? null, emission[0], emission[1], emission[2])
 		this.#bindMesh(mesh, surface)
 		if(state.alpha >= 0.999) {
-			gl.disable(gl.BLEND)
-			gl.depthMask(true)
+			if(!this.#opaqueSurface) {
+				gl.disable(gl.BLEND)
+				gl.depthMask(true)
+				this.#opaqueSurface = true
+			}
 			gl.drawElements(gl.TRIANGLES, mesh.count, mesh.indexType, 0)
 			return
 		}
 		// Faded dice: a depth pre-pass keeps only the nearest surface, so the
 		// die reads as one translucent solid instead of showing its inside.
+		this.#opaqueSurface = false
 		gl.disable(gl.BLEND)
 		gl.colorMask(false, false, false, false)
 		gl.depthMask(true)
@@ -687,6 +705,7 @@ export class DiceGL {
 	 */
 	drawHalo(frame: FrameSetup, mesh: GLMesh, state: DrawState, inflate: number, grow = 0, weight = 1): void {
 		if(state.glowStrength <= 0.001) return
+		this.#surfaceWinding = undefined
 		const gl = this.gl
 		const halo = this.#halo
 		const u = halo.uniforms

@@ -478,6 +478,7 @@ export function* simulateSteps(inputs: readonly SimulationBody[], options: Simul
 	const planeD = [-W, -W, -D, -D, 0]
 	const planeMu = [options.wallFriction, options.wallFriction, options.wallFriction, options.wallFriction, options.floorFriction]
 	const planeE = [options.wallRestitution, options.wallRestitution, options.wallRestitution, options.wallRestitution, options.floorRestitution]
+	const reachablePlanes = new Int8Array(5)
 
 	const frames: Float32Array[] = []
 	const record = (): void => {
@@ -588,10 +589,19 @@ export function* simulateSteps(inputs: readonly SimulationBody[], options: Simul
 				markers.push({ step, type: 'release', body: index })
 			}
 		}
-		for(const body of bodies) {
+		let widest = 0
+		for(let index = 0; index < count; index++) {
+			const body = bodies[index]!
 			body.touching = false
-			if(body.released && !body.asleep) body.vy -= options.gravity * dt
-			if(body.released) body.updateWorld(body.asleep ? body.worldStep : step)
+			if(!body.released) continue
+			if(!body.asleep) body.vy -= options.gravity * dt
+			body.updateWorld(body.asleep ? body.worldStep : step)
+			const w = Math.sqrt(body.wx * body.wx + body.wy * body.wy + body.wz * body.wz)
+			const v = Math.sqrt(body.vx * body.vx + body.vy * body.vy + body.vz * body.vz)
+			spinOf[index] = w
+			const reach = body.data.radius + (v + w * body.data.radius) * dt + 0.0025
+			extent[index] = reach
+			if(reach > widest) widest = reach
 		}
 
 		contactCount = 0
@@ -602,6 +612,17 @@ export function* simulateSteps(inputs: readonly SimulationBody[], options: Simul
 				const k = body.portal
 				if(planeNX[k]! * body.px + planeNZ[k]! * body.pz - planeD[k]! > body.data.radius * 0.35) body.portal = -1
 			}
+			// The swept sphere bounds every vertex, with padding for roundoff at large coordinates.
+			const sweptRadius = extent[index]!
+			const reach = sweptRadius + 1e-12 * (Math.abs(body.px) + Math.abs(body.py) + Math.abs(body.pz) + sweptRadius)
+			let planeCount = 0
+			for(let k = 0; k < 5; k++) {
+				if(k === body.portal) continue
+				const distance = planeNX[k]! * body.px + planeNY[k]! * body.py + planeNZ[k]! * body.pz - planeD[k]!
+				if(distance > reach) continue
+				reachablePlanes[planeCount++] = k
+			}
+			if(planeCount === 0) continue
 			const verts = body.worldVerts
 			for(let v = 0; v < body.data.vertCount * 3; v += 3) {
 				const x = verts[v]!, y = verts[v + 1]!, z = verts[v + 2]!
@@ -610,8 +631,8 @@ export function* simulateSteps(inputs: readonly SimulationBody[], options: Simul
 				const vx = body.vx + (body.wy * rz - body.wz * ry)
 				const vy = body.vy + (body.wz * rx - body.wx * rz)
 				const vz = body.vz + (body.wx * ry - body.wy * rx)
-				for(let k = 0; k < 5; k++) {
-					if(k === body.portal) continue
+				for(let plane = 0; plane < planeCount; plane++) {
+					const k = reachablePlanes[plane]!
 					const nx = planeNX[k]!, ny = planeNY[k]!, nz = planeNZ[k]!
 					const depth = planeD[k]! - (nx * x + ny * y + nz * z)
 					const approach = -(nx * vx + ny * vy + nz * vz)
@@ -630,15 +651,6 @@ export function* simulateSteps(inputs: readonly SimulationBody[], options: Simul
 				b--
 			}
 			order[b + 1] = index
-		}
-		let widest = 0
-		for(let index = 0; index < count; index++) {
-			const body = bodies[index]!
-			const w = Math.sqrt(body.wx * body.wx + body.wy * body.wy + body.wz * body.wz)
-			const v = Math.sqrt(body.vx * body.vx + body.vy * body.vy + body.vz * body.vz)
-			spinOf[index] = w
-			extent[index] = body.data.radius + (v + w * body.data.radius) * dt + 0.0025
-			if(body.released && extent[index]! > widest) widest = extent[index]!
 		}
 		for(let a = 0; a < count; a++) {
 			const i = order[a]!, A = bodies[i]!

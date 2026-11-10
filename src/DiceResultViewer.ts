@@ -1,7 +1,9 @@
 import { createDisplayCanvas } from './canvas'
 import { normalizeDisplayRequest, getDisplayBodyCount } from './displayRequest'
 import { DisplayCancelledError, isDisplayCancelledError, rethrowPresentationError } from './errors'
-import SceneRenderer from './renderers/SceneRenderer'
+import { WorkerRenderer } from './renderers/WorkerRenderer'
+import { loadModule } from './loadModule'
+import { particlesUrl, presetsUrl, sceneUrl } from './runtimeAssets'
 import { ThemeRepository } from './themeRepository'
 import {
 	createTimelineProgressTracker,
@@ -18,6 +20,7 @@ import type {
 	DisplayTimelineRequest,
 	DisplayTimelineResult,
 	ParticleBurstMoment,
+	RendererContext,
 	RequiredViewerOptions,
 	ViewerOptions
 } from './types'
@@ -25,7 +28,7 @@ import type {
 const PARTICLE_BURST_MOMENTS: readonly ParticleBurstMoment[] = ['impact', 'collision', 'settle', 'aura', 'explode', 'critical']
 
 export class DiceResultViewer {
-	readonly canvas: HTMLCanvasElement
+	#canvas: HTMLCanvasElement
 	#options: RequiredViewerOptions
 	readonly #themes: ThemeRepository
 	#renderer: DisplayRenderer | undefined
@@ -33,23 +36,35 @@ export class DiceResultViewer {
 	#active: AbortController | undefined
 	#resizeHandler: (() => void) | undefined
 	#resizeObserver: ResizeObserver | undefined
-	#initialized = false
+	#initialization: Promise<this> | undefined
+	#workerDisabled = false
 	#disposed = false
 
 	constructor(options: ViewerOptions = {}) {
 		this.#options = createViewerOptions(options)
 		validateViewerOptions(this.#options)
-		this.canvas = createDisplayCanvas(this.#options.container, this.#options.id)
+		this.#canvas = createDisplayCanvas(this.#options.container, this.#options.id)
 		this.#themes = new ThemeRepository(this.#options)
+	}
+
+	get canvas(): HTMLCanvasElement {
+		return this.#canvas
 	}
 
 	async init(): Promise<this> {
 		this.#assertUsable()
-		if(this.#initialized) return this
+		return this.#initialization ??= this.#initialize().catch(error => {
+			this.#initialization = undefined
+			throw error
+		})
+	}
+
+	async #initialize(): Promise<this> {
 		await Promise.all([
 			this.#ensureRenderer(),
 			...[this.#options.theme, ...this.#options.preloadThemes].map(theme => this.#themes.load(theme))
 		])
+		if(this.#disposed) throw new DisplayCancelledError()
 		this.#resizeHandler = (): void => this.resize()
 		window.addEventListener('resize', this.#resizeHandler, { passive: true })
 		if(typeof ResizeObserver !== 'undefined') {
@@ -57,7 +72,6 @@ export class DiceResultViewer {
 			this.#resizeObserver.observe(this.canvas.parentElement ?? this.canvas)
 		}
 		this.resize()
-		this.#initialized = true
 		return this
 	}
 
@@ -74,7 +88,7 @@ export class DiceResultViewer {
 		this.#active = controller
 		const startedAt = performance.now()
 		try {
-			if(!this.#initialized) await this.init()
+			await this.init()
 			const renderer = await this.#ensureRenderer()
 			if(controller.signal.aborted) throw new DisplayCancelledError()
 			await renderer.display(normalized, controller.signal)
@@ -110,7 +124,7 @@ export class DiceResultViewer {
 		this.#active = controller
 		const startedAt = performance.now()
 		try {
-			if(!this.#initialized) await this.init()
+			await this.init()
 			const renderer = await this.#ensureRenderer()
 			if(controller.signal.aborted) throw new DisplayCancelledError()
 			if(plan.degraded) {
@@ -161,7 +175,16 @@ export class DiceResultViewer {
 		const nextOptions = createUpdatedViewerOptions(this.#options, options)
 		this.#options = nextOptions
 		this.#themes.updateOptions(this.#options)
-		await this.#renderer?.updateOptions(this.#options)
+		const renderer = await this.#rendererReady
+		if(this.#disposed) throw new DisplayCancelledError()
+		if(renderer && renderer === this.#renderer) {
+			try {
+				await renderer.updateOptions(this.#options)
+			} catch(error) {
+				if(renderer === this.#renderer || this.#disposed) throw error
+				await this.#ensureRenderer()
+			}
+		}
 		if(options.theme) await this.#themes.load(options.theme)
 	}
 
@@ -192,33 +215,73 @@ export class DiceResultViewer {
 
 	dispose(): void {
 		if(this.#disposed) return
+		this.#disposed = true
 		this.clear()
 		if(this.#resizeHandler) window.removeEventListener('resize', this.#resizeHandler)
 		this.#resizeObserver?.disconnect()
 		this.#resizeObserver = undefined
 		this.#renderer?.dispose()
 		this.canvas.remove()
-		this.#disposed = true
 	}
 
 	/** One renderer (and WebGL context) per viewer, created on first use. */
 	#ensureRenderer(): Promise<DisplayRenderer> {
-		if(this.#rendererReady) return this.#rendererReady
-		const renderer = new SceneRenderer()
-		this.#renderer = renderer
-		this.#rendererReady = renderer.init({
-			canvas: this.canvas,
-			options: this.#options,
-			loadTheme: theme => this.#themes.load(theme)
-		}).then(() => renderer, (error: unknown) => {
-			renderer.dispose()
-			if(this.#renderer === renderer) {
-				this.#renderer = undefined
-				this.#rendererReady = undefined
-			}
+		return this.#rendererReady ??= this.#startRenderer().catch(error => {
+			this.#rendererReady = undefined
 			throw error
 		})
-		return this.#rendererReady
+	}
+
+	async #startRenderer(): Promise<DisplayRenderer> {
+		const context = (): RendererContext => ({
+			canvas: this.canvas,
+			effects: { particles: particlesUrl().href, presets: presetsUrl().href },
+			options: this.#options,
+			loadTheme: theme => this.#themes.load(theme)
+		})
+		if(!this.#workerDisabled && WorkerRenderer.supports(this.canvas)) {
+			const worker = new WorkerRenderer(() => {
+				if(this.#renderer !== worker || this.#disposed) return
+				this.#restoreMainThread(worker)
+				this.#rendererReady = undefined
+			})
+			this.#renderer = worker
+			try {
+				await worker.init(context())
+				return worker
+			} catch {
+				worker.dispose()
+				if(this.#disposed) throw new DisplayCancelledError()
+				this.#restoreMainThread(worker)
+			}
+		}
+		const { SceneRenderer } = await loadModule<typeof import('./renderers/sceneWorker')>(sceneUrl().href)
+		if(this.#disposed) throw new DisplayCancelledError()
+		const renderer = new SceneRenderer()
+		this.#renderer = renderer
+		try {
+			await renderer.init(context())
+			return renderer
+		} catch(error) {
+			renderer.dispose()
+			this.#renderer = undefined
+			throw error
+		}
+	}
+
+	#restoreMainThread(worker: WorkerRenderer): void {
+		this.#workerDisabled = true
+		this.#renderer = undefined
+		if(!worker.transferred) return
+		// The transferred canvas cannot create a main-thread WebGL context.
+		const previous = this.#canvas
+		const replacement = previous.cloneNode(false) as HTMLCanvasElement
+		previous.replaceWith(replacement)
+		this.#canvas = replacement
+		if(!replacement.parentElement && this.#resizeObserver) {
+			this.#resizeObserver.unobserve(previous)
+			this.#resizeObserver.observe(replacement)
+		}
 	}
 
 	#assertUsable(): void {

@@ -8,7 +8,7 @@ import type {
 import { normalizeDisplayMode } from './displayRequest'
 import { validateGlowOptions, validateParticleOptions, validateSkinOptions } from './particleOptions'
 
-const noop = (): void => undefined
+export const noop = (): void => undefined
 
 const baseEffect = (
 	durationMs: number,

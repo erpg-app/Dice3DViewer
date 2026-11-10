@@ -7,10 +7,8 @@ O `@erpg/dicecore` interpreta a fórmula e decide os resultados; o `@erpg/dice3d
 Versão atual: **3.0.0-alpha.0**.
 
 > A v3 é um upgrade major: a mesma API pública, sem Babylon.js e sem Havok.
-> Um renderizador WebGL próprio e um motor de física determinístico para dados
-> cabem em um único módulo de **44 KB gzip** (a v2 no modo físico carregava
-> cerca de 1,16 MB gzip entre Babylon, Havok JS e WASM). O motor de
-> partículas (4 KB) e os 15 presets (4 KB) são baixados só quando usados.
+> O renderizador WebGL e a física determinística rodam em um Web Worker
+> quando disponível, com fallback automático na thread principal.
 
 ## Documentação
 
@@ -28,8 +26,8 @@ Versão atual: **3.0.0-alpha.0**.
 
 ## O que muda na v3
 
-- **Sem dependências de runtime.** Babylon.js e Havok saíram; o pacote é um
-  único módulo ES com renderizador WebGL2 (e fallback WebGL1) e física própria.
+- **Sem dependências de runtime.** O pacote usa WebGL2 (com fallback WebGL1)
+  e física própria.
 - **Só física, sempre.** Toda apresentação é simulada: colisões entre dados,
   paredes, pilhas, explosões e rerolagens. O modo `kinematic` da v2 foi
   removido; `mode: 'kinematic'` continua aceito e é apresentado com física.

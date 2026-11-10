@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { createShape, faceTargetQuaternion, planesFromCollider, readFace, type DiceShape } from './engine/shape'
-import { pairDepth, type SimulationResult } from './engine/simulation'
+import { pairDepth, simulate, type SimulationResult } from './engine/simulation'
 import {
 	PACKED_THROW,
 	createFollowUpThrow,
@@ -124,6 +124,22 @@ describe('v3 dice physics', () => {
 		assert.ok(impacts.length >= 3, `expected a landing per die, got ${impacts.length}`)
 		for(const body of [0, 1, 2]) assert.ok(impacts.some(marker => marker.body === body), `die ${body} landed without an impact`)
 		assert.ok(impacts.every(marker => (marker.force ?? 0) > 0))
+	})
+
+	it('detects speculative wall impacts beyond a die’s stationary radius', () => {
+		const shape = shapeOf('d6')
+		const halfX = 6
+		for(const [speed, spin] of [[120, 0], [0, 200]] as const) {
+			const result = simulate([{
+				shape, value: 1, position: [halfX - shape.radius - 0.03, 5, 0], orientation: [0, 0, 0, 1],
+				velocity: [speed, 0, 0], angularVelocity: [0, 0, spin], releaseTime: 0, portal: -1
+			}], {
+				halfX, halfZ: 6, gravity: 25, floorFriction: 0.5, floorRestitution: 0.25,
+				wallFriction: 0, wallRestitution: 0.5, diceFriction: 0.35, diceRestitution: 0.45,
+				linearDamping: 0.2, angularDamping: 0.8, maxTime: 4, recordEvery: 1, seed: 'wall-reach'
+			})
+			assert.ok(result.frames[1]![0]! < result.frames[0]![0]!, `first step bounced at speed ${speed}, spin ${spin}`)
+		}
 	})
 
 	it('is bit-for-bit deterministic for the same seed', () => {

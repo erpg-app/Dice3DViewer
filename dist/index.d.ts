@@ -105,8 +105,8 @@ export declare type DiceParticlePreset = 'sparkle' | 'fire' | 'arcane' | 'frost'
 
 declare class DiceResultViewer {
     #private;
-    readonly canvas: HTMLCanvasElement;
     constructor(options?: ViewerOptions);
+    get canvas(): HTMLCanvasElement;
     init(): Promise<this>;
     display(request: DisplayRequest): Promise<DisplayResult>;
     displayTimeline(request: DisplayTimelineRequest): Promise<DisplayTimelineResult>;

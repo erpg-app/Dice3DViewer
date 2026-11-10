@@ -578,6 +578,7 @@ export interface ResolvedThemeConfig extends ThemeConfig {
 
 export interface RendererContext {
 	readonly canvas: HTMLCanvasElement
+	readonly effects: { readonly particles: string; readonly presets: string }
 	readonly options: Readonly<RequiredViewerOptions>
 	readonly loadTheme: (theme: string) => Promise<ResolvedThemeConfig>
 }

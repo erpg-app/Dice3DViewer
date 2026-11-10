@@ -110,6 +110,12 @@ tema, material e moeda inválidas.
 
 Cria o contexto WebGL, carrega o tema principal e os temas de `preloadThemes`, instala a observação de tamanho e devolve a própria instância. Chamadas repetidas são idempotentes.
 
+Quando disponível, um Web Worker executa a física e o WebGL em um
+`OffscreenCanvas`. A biblioteca usa a thread principal se o Worker não
+inicializar ou para a próxima apresentação se ele falhar em execução. Se o
+canvas já tiver sido transferido, consulte `viewer.canvas` novamente para
+obter o elemento que o substituiu.
+
 `display()` chama `init()` automaticamente quando necessário.
 
 ### `display(request)`
