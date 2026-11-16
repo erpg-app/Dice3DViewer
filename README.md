@@ -4,7 +4,7 @@ Camada TypeScript de apresentação 3D para resultados de dados já resolvidos.
 
 O `@erpg/dicecore` interpreta a fórmula e decide os resultados; o `@erpg/dice3dview` recebe esses valores prontos e apenas os apresenta. A biblioteca não interpreta notação, não sorteia valores e não usa a face física como fonte do resultado.
 
-Versão atual: **3.0.0-alpha.0**.
+Versão atual: **3.0.0-alpha.1**.
 
 > A v3 é um upgrade major: a mesma API pública, sem Babylon.js e sem Havok.
 > O renderizador WebGL e a física determinística rodam em um Web Worker
@@ -58,7 +58,7 @@ npm install @erpg/dice3dview
 Para consumir diretamente uma tag do repositório:
 
 ```bash
-npm install github:erpg-app/Dice3DViewer#v3.0.0-alpha.0
+npm install github:erpg-app/Dice3DViewer#v3.0.0-alpha.1
 ```
 
 ```ts

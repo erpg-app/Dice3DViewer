@@ -4,6 +4,8 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 
 ## [Não publicado]
 
+## [3.0.0-alpha.1] - 2026-11-16
+
 ### Adicionado
 
 - opção `maxPixelRatio` (padrão `2`): teto do device pixel ratio do canvas;

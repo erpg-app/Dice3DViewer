@@ -2,7 +2,7 @@
 
 [← Voltar ao README](../README.md)
 
-Esta referência descreve a API pública de `@erpg/dice3dview` 3.0.0-alpha.0. A biblioteca é destinada ao navegador: a criação exige DOM; a inicialização do renderer exige WebGL (WebGL2, com fallback para WebGL1).
+Esta referência descreve a API pública de `@erpg/dice3dview` 3.0.0-alpha.1. A biblioteca é destinada ao navegador: a criação exige DOM; a inicialização do renderer exige WebGL (WebGL2, com fallback para WebGL1).
 
 ## Exports públicos
 
