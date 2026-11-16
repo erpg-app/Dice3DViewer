@@ -5,10 +5,8 @@
   "version": 0.3,
   "material": {
     "type": "color",
-    "diffuseTexture": {
-      "light": "../default/diffuse-light.webp",
-      "dark": "../default/diffuse-dark.webp"
-    },
+    "diffuseTexture": "../default/diffuse-light.webp",
+    "invertOnLightBody": true,
     "diffuseLevel": 1,
     "bumpTexture": "../default/normal.webp",
     "bumpLevel": 0.5

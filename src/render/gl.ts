@@ -29,6 +29,8 @@ export interface SurfaceMaterial {
 	readonly specular: ReadonlyVec3
 	readonly diffuse?: GLTexture | undefined
 	readonly diffuseLevel?: number
+	/** Draws the diffuse colors inverted (light labels become dark). */
+	readonly invertDiffuse?: boolean
 	/** Alpha-masked texture composited over `color` (theme type "color"). */
 	readonly colorMask?: boolean
 	readonly bump?: GLTexture | undefined
@@ -104,6 +106,7 @@ uniform sampler2D uSpecularMap;
 uniform float uHasDiffuse;
 uniform float uColorMask;
 uniform float uDiffuseLevel;
+uniform float uInvertDiffuse;
 uniform float uHasBump;
 uniform float uBumpLevel;
 uniform float uHasSpecularMap;
@@ -174,7 +177,7 @@ void main() {
 	vec3 albedo = body;
 	if(uHasDiffuse > 0.5) {
 		vec4 t = texture2D(uDiffuse, vUv);
-		vec3 rgb = t.rgb * uDiffuseLevel;
+		vec3 rgb = (uInvertDiffuse > 0.5 ? 1.0 - t.rgb : t.rgb) * uDiffuseLevel;
 		if(uColorMask > 0.5 && uHasOutline > 0.5) {
 			// Busy skins: a thin contrasting outline keeps numbers and symbols readable.
 			vec2 o = uDiffuseTexel * 2.5;
@@ -650,6 +653,7 @@ export class DiceGL {
 			gl.uniform1f(u.uUnlit ?? null, material.unlit ? 1 : 0)
 			gl.uniform1f(u.uColorMask ?? null, material.colorMask ? 1 : 0)
 			gl.uniform1f(u.uDiffuseLevel ?? null, material.diffuseLevel ?? 1)
+			gl.uniform1f(u.uInvertDiffuse ?? null, material.invertDiffuse ? 1 : 0)
 			this.#bindTexture(0, material.diffuse, u.uDiffuse, u.uHasDiffuse)
 			this.#bindTexture(1, this.#derivatives ? material.bump : undefined, u.uBump, u.uHasBump)
 			gl.uniform1f(u.uBumpLevel ?? null, material.bumpLevel ?? 1)

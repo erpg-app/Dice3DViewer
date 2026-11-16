@@ -27,6 +27,13 @@ import type {
 
 const PARTICLE_BURST_MOMENTS: readonly ParticleBurstMoment[] = ['impact', 'collision', 'settle', 'aura', 'explode', 'critical']
 
+/**
+ * A Worker that failed once (blocked by policy, out of memory, a driver that
+ * refuses the transferred canvas) fails again: every viewer created afterwards
+ * in this page goes straight to the main thread.
+ */
+let workerFailed = false
+
 export class DiceResultViewer {
 	#canvas: HTMLCanvasElement
 	#options: RequiredViewerOptions
@@ -239,7 +246,7 @@ export class DiceResultViewer {
 			options: this.#options,
 			loadTheme: theme => this.#themes.load(theme)
 		})
-		if(!this.#workerDisabled && WorkerRenderer.supports(this.canvas)) {
+		if(!workerFailed && !this.#workerDisabled && WorkerRenderer.supports(this.canvas)) {
 			const worker = new WorkerRenderer(() => {
 				if(this.#renderer !== worker || this.#disposed) return
 				this.#restoreMainThread(worker)
@@ -270,6 +277,7 @@ export class DiceResultViewer {
 	}
 
 	#restoreMainThread(worker: WorkerRenderer): void {
+		workerFailed = true
 		this.#workerDisabled = true
 		this.#renderer = undefined
 		if(!worker.transferred) return

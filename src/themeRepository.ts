@@ -44,6 +44,9 @@ const assertMaterial = (value: unknown, theme: string): ThemeMaterialConfig => {
 	)) {
 		throw new Error(`Theme '${theme}' material.diffuseTexture must be a string or light/dark map.`)
 	}
+	if(value.invertOnLightBody !== undefined && typeof value.invertOnLightBody !== 'boolean') {
+		throw new Error(`Theme '${theme}' material.invertOnLightBody must be a boolean.`)
+	}
 	for(const field of ['bumpTexture', 'specularTexture'] as const) {
 		if(value[field] !== undefined && typeof value[field] !== 'string') {
 			throw new Error(`Theme '${theme}' material.${field} must be a string.`)

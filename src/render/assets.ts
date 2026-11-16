@@ -272,6 +272,8 @@ export class AssetLibrary {
 				specular: [0.35, 0.35, 0.35],
 				diffuse,
 				diffuseLevel: config.material.diffuseLevel ?? 1,
+				// One atlas of light labels: light bodies show it inverted.
+				invertDiffuse: typeof definition === 'string' && config.material.invertOnLightBody === true && lightBody,
 				colorMask: colorTheme,
 				bump,
 				bumpLevel: config.material.bumpLevel ?? 1,

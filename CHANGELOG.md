@@ -7,6 +7,12 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 ### Adicionado
 
 - opção `maxPixelRatio` (padrão `2`): teto do device pixel ratio do canvas;
+- `material.invertOnLightBody` nos temas: com um único `diffuseTexture` de
+  rótulos claros, corpos claros desenham o atlas invertido; os temas `default`
+  e `default-v2` deixaram de ter `diffuse-dark.webp` (19,6 KB a menos quando a
+  mesa mistura dados claros e escuros);
+- falha do Worker vale para a página: viewers criados depois vão direto para a
+  thread principal;
 - opção `maxFps` (padrão `60`): telas de 120 Hz ou mais desenham metade dos
   quadros, com ritmo uniforme;
 - aquecimento no `init()`: modelo, texturas e formas de colisão do tema do

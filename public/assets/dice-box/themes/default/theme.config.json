@@ -6,10 +6,8 @@
   "meshFile": "default.json",
 	"material": {
 		"type": "color",
-		"diffuseTexture": {
-			"light": "diffuse-light.webp",
-			"dark": "diffuse-dark.webp"
-		},
+		"diffuseTexture": "diffuse-light.webp",
+		"invertOnLightBody": true,
 		"diffuseLevel": 1,
 		"bumpTexture": "normal.webp",
 		"bumpLevel": 0.5

@@ -635,6 +635,12 @@ export declare interface ThemeMaterialConfig {
         light: string;
         dark: string;
     }>;
+    /**
+     * With a single `diffuseTexture` of light labels: light bodies draw it
+     * inverted (dark labels), so one atlas serves every body color instead of a
+     * light/dark pair.
+     */
+    readonly invertOnLightBody?: boolean;
     readonly bumpTexture?: string;
     readonly specularTexture?: string;
     readonly diffuseLevel?: number;
