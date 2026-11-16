@@ -6,6 +6,16 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 
 ### Adicionado
 
+- opção `maxPixelRatio` (padrão `2`): teto do device pixel ratio do canvas;
+- opção `maxFps` (padrão `60`): telas de 120 Hz ou mais desenham metade dos
+  quadros, com ritmo uniforme;
+- aquecimento no `init()`: modelo, texturas e formas de colisão do tema do
+  viewer são carregados e cada shader é usado uma vez fora da mesa, então o
+  primeiro arremesso não engasga (pior quadro de ~90 ms para ~30 ms com CPU 4×
+  mais lenta);
+- eventos `classify` aceitam `color` e `intensity` próprios: o dado responde
+  na cor dada, com um anel na mesa em qualquer resultado, e `intensity: 0`
+  deixa só o anel, sem brilho no dado;
 - formas de partícula `bolt` (raio com bifurcação), `arc` (filamentos
   elétricos), `flame`, `snowflake`, `heart`, `diamond`, `triangle` e `cross`;
   raios e arcos redesenham o zigue-zague 14 vezes por segundo;
@@ -20,6 +30,10 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 - `landingSpread` (`0–1`, default `0`): desloca o aglomerado de pouso de
   cada apresentação para um ponto seedado da mesa, em vez de mirar sempre o
   centro. Com `0` nada muda; em mesas largas, `1` usa a mesa inteira.
+
+### Alterado
+
+- `normal.webp` do tema padrão recodificado com perdas (59,7 KB → 17,3 KB).
 
 ### Corrigido
 

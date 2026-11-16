@@ -104,6 +104,7 @@ interface Transient {
 	readonly pulses: number
 	readonly intensity: number
 	readonly colorFor?: (entry: Entry) => Vec3 | undefined
+	readonly intensityFor?: (entry: Entry) => number | undefined
 }
 
 /** Shock ring expanding on the table under a die (explosions, rerolls, criticals). */
@@ -140,6 +141,9 @@ const DISCARDED_SATURATION = 0.05
 const EXIT_MS = 280
 /** Longest step of the animation clock: a slow frame delays the motion, it never skips it. */
 const MAX_FRAME_MS = 50
+/** Dice the warm-up prepares (a d100 is a d10 pair) and how far off the table it draws them. */
+const WARM_SIDES = [20, 12, 10, 8, 6, 4] as const
+const WARM_DISTANCE = 1000
 const RING_MS = 650
 /** Reduced motion: dice fade in at rest instead of being thrown. */
 const STILL_FADE_MS = 240
@@ -193,6 +197,8 @@ export class SceneRenderer implements DisplayRenderer {
 	/** Animation loops currently rendering every frame. */
 	#running = 0
 	#generation = 0
+	/** When the canvas was last drawn, for the `maxFps` cap. */
+	#lastDraw = -Infinity
 	#width = 300
 	#height = 150
 	/** A lost WebGL context is being rebuilt: nothing is drawn meanwhile. */
@@ -208,6 +214,53 @@ export class SceneRenderer implements DisplayRenderer {
 		const width = 'clientWidth' in canvas ? canvas.clientWidth || canvas.parentElement?.clientWidth || 300 : canvas.width
 		const height = 'clientHeight' in canvas ? canvas.clientHeight || canvas.parentElement?.clientHeight || 150 : canvas.height
 		this.resize(context.viewport?.width ?? width, context.viewport?.height ?? height, context.viewport?.pixelRatio)
+		void this.#warm()
+	}
+
+	/**
+	 * Brings forward what the first throw would otherwise do while its dice are
+	 * already flying: the model and textures of the viewer's theme, the
+	 * collision shapes, and the first use of each shader (drivers compile them
+	 * when they first draw). Everything is drawn once far off the table. It is
+	 * not awaited: a throw that starts meanwhile shares the same loads.
+	 */
+	async #warm(): Promise<void> {
+		try {
+			const config = await this.#context!.loadTheme(this.#options!.theme)
+			const entries: Entry[] = []
+			for(const sides of WARM_SIDES) {
+				if(!this.#gl || this.#entries.length) return
+				entries.push(...(await this.#createHandle({ id: `warm-d${sides}`, sides, value: 1 }, config)).entries)
+			}
+			// A throw is on the table or the context went away: it needs no warming.
+			if(!this.#gl || this.#gl.lost || this.#entries.length || this.#running) return
+			const now = performance.now()
+			for(const entry of entries) {
+				entry.visible = true
+				entry.position = [WARM_DISTANCE, 0, 0]
+			}
+			const transient: Transient = { entries, start: now, duration: 1000, color: [0, 0, 0], pulses: 1, intensity: 1 }
+			const rings = this.#rings
+			this.#entries = entries
+			this.#transients.push(transient)
+			this.#rings = [...rings, { x: WARM_DISTANCE, z: 0, radius: 1, start: now, color: [0, 0, 0], strength: 1 }]
+			try {
+				this.#render()
+			} finally {
+				this.#entries = []
+				this.#transients = this.#transients.filter(existing => existing !== transient)
+				this.#rings = rings
+			}
+			this.#render()
+		} catch {
+			// The first throw loads whatever is missing and reports its own errors.
+		}
+	}
+
+	/** Screens much faster than `maxFps` skip this frame; the pacing stays even. */
+	#tooSoon(now: number): boolean {
+		const maxFps = this.#options?.maxFps ?? 0
+		return maxFps > 0 && now - this.#lastDraw < 600 / maxFps
 	}
 
 	async display(request: NormalizedDisplayRequest, signal: AbortSignal): Promise<void> {
@@ -273,19 +326,41 @@ export class SceneRenderer implements DisplayRenderer {
 				// Transforms (compound, penetrate) and classifications pulse in the effect color.
 				const entries: Entry[] = []
 				let pulses = 1
+				// A classification may bring its own color and glow for its die.
+				const accents = new Map<Entry, Vec3>()
+				const levels = new Map<Entry, number>()
 				for(const action of phase.actions) {
-					entries.push(...(handles.get(action.dieId)?.entries ?? []))
-					if(action.kind === 'classify') pulses = Math.max(pulses, action.pulses)
-				}
-				if(phase.effect === 'criticalSuccess' || phase.effect === 'criticalFailure') {
-					const color = parseHexColor(options.timeline.effects[phase.effect].color, [1, 1, 1])
-					for(const entry of entries) {
-						this.#ring(entry, color, 1)
-						this.#particles?.burst('critical', entry.position, entry.shape.radius, { subject: entry.die, key: entry })
+					const own = handles.get(action.dieId)?.entries ?? []
+					entries.push(...own)
+					if(action.kind !== 'classify') continue
+					pulses = Math.max(pulses, action.pulses)
+					if(action.color !== undefined) {
+						const accent = parseHexColor(action.color, [1, 1, 1])
+						for(const entry of own) accents.set(entry, accent)
 					}
-					this.#ambient()
+					if(action.intensity !== undefined) for(const entry of own) levels.set(entry, action.intensity)
 				}
-				if(entries.length) await this.#pulse(entries, phase.effect, phase.durationMs, pulses, signal)
+				const critical = phase.effect === 'criticalSuccess' || phase.effect === 'criticalFailure'
+				const criticalColor = phase.effect === 'criticalSuccess' || phase.effect === 'criticalFailure'
+					? parseHexColor(options.timeline.effects[phase.effect].color, [1, 1, 1])
+					: undefined
+				let ringed = false
+				for(const entry of entries) {
+					// Criticals and dice with their own color send a ring across the table.
+					const color = accents.get(entry) ?? criticalColor
+					if(!color) continue
+					this.#ring(entry, color, 1)
+					ringed = true
+					if(critical) this.#particles?.burst('critical', entry.position, entry.shape.radius, { subject: entry.die, key: entry })
+				}
+				if(ringed) this.#ambient()
+				if(entries.length) {
+					await this.#pulse(
+						entries, phase.effect, phase.durationMs, pulses, signal,
+						accents.size ? entry => accents.get(entry) : undefined,
+						levels.size ? entry => levels.get(entry) : undefined
+					)
+				}
 			}
 			dispatchTimelineProgress(options.onTimelineProgress, progress.completePhase(phaseIndex))
 		}
@@ -318,7 +393,7 @@ export class SceneRenderer implements DisplayRenderer {
 		if(!this.#context) return
 		this.#width = Math.max(1, width)
 		this.#height = Math.max(1, height)
-		const ratio = Math.min(2, pixelRatio)
+		const ratio = Math.min((this.#options ?? this.#context.options).maxPixelRatio, pixelRatio)
 		this.#context.canvas.width = Math.max(1, Math.round(this.#width * ratio))
 		this.#context.canvas.height = Math.max(1, Math.round(this.#height * ratio))
 		this.#requestRender()
@@ -992,7 +1067,8 @@ export class SceneRenderer implements DisplayRenderer {
 		durationMs: number,
 		pulses: number,
 		signal: AbortSignal,
-		colorFor?: (entry: Entry) => Vec3 | undefined
+		colorFor?: (entry: Entry) => Vec3 | undefined,
+		intensityFor?: (entry: Entry) => number | undefined
 	): Promise<void> {
 		if(durationMs <= 0) return Promise.resolve()
 		const effect = this.#options!.timeline.effects[effectName]
@@ -1003,7 +1079,8 @@ export class SceneRenderer implements DisplayRenderer {
 			color: parseHexColor(effect.color, [1, 1, 1]),
 			pulses: Math.max(1, pulses),
 			intensity: effect.intensity,
-			...(colorFor ? { colorFor } : {})
+			...(colorFor ? { colorFor } : {}),
+			...(intensityFor ? { intensityFor } : {})
 		}
 		this.#transients.push(transient)
 		return this.#wait(durationMs, signal).finally(() => {
@@ -1043,6 +1120,10 @@ export class SceneRenderer implements DisplayRenderer {
 				if(finished) return
 				if(signal.aborted || generation !== this.#generation) return abort()
 				const now = performance.now()
+				if(this.#tooSoon(now)) {
+					schedule(tick)
+					return
+				}
 				elapsed += Math.min(MAX_FRAME_MS, Math.max(0, now - last))
 				last = now
 				let done = false
@@ -1079,6 +1160,10 @@ export class SceneRenderer implements DisplayRenderer {
 		if(this.#ambientRequest !== null || typeof requestAnimationFrame !== 'function') return
 		this.#ambientRequest = requestAnimationFrame(() => {
 			this.#ambientRequest = null
+			if(this.#tooSoon(performance.now())) {
+				this.#ambient()
+				return
+			}
 			if(!this.#running) this.#render()
 			// A pulsing glow breathes for as long as dice are on the table.
 			const breathing = Boolean(this.#options?.glow?.pulse && !this.#reducedMotion() && this.#entries.some(entry => entry.visible))
@@ -1094,6 +1179,7 @@ export class SceneRenderer implements DisplayRenderer {
 		if(!gl || !canvas || !options || gl.lost || this.#restoring) return
 		const reduced = this.#reducedMotion()
 		const now = performance.now()
+		this.#lastDraw = now
 		const aspect = canvas.width / Math.max(1, canvas.height)
 		const lightIntensity = options.lightIntensity
 		let frame = this.#frame
@@ -1178,7 +1264,7 @@ export class SceneRenderer implements DisplayRenderer {
 			for(const transient of this.#transients) {
 				if(!transient.entries.includes(entry)) continue
 				const progress = clamp01((now - transient.start) / Math.max(1, transient.duration))
-				const value = (0.2 + 0.8 * Math.sin(progress * Math.PI * transient.pulses) ** 2) * transient.intensity
+				const value = (0.2 + 0.8 * Math.sin(progress * Math.PI * transient.pulses) ** 2) * (transient.intensityFor?.(entry) ?? transient.intensity)
 				if(value > strength) {
 					strength = value
 					color = transient.colorFor?.(entry) ?? transient.color

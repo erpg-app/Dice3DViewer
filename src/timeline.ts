@@ -72,6 +72,9 @@ export interface TimelineClassifyAction {
 	readonly effect: 'success' | 'failure' | 'neutral' | 'criticalSuccess' | 'criticalFailure'
 	readonly dieId: string
 	readonly pulses: number
+	/** The event's own color and glow, when it brings them. */
+	readonly color?: string
+	readonly intensity?: number
 	readonly eventSequences: readonly number[]
 }
 
@@ -252,6 +255,13 @@ export const planDiceTimeline = (
 			'success', 'failure', 'neutral', 'critical-success', 'critical-failure'
 		].includes(event.outcome)) {
 			throw new Error(`Timeline classification ${event.sequence} has unsupported outcome '${String(event.outcome)}'.`)
+		}
+		if(event.type === 'classify' && event.color !== undefined && !/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(String(event.color))) {
+			throw new Error(`Timeline classification ${event.sequence} color must be #rgb or #rrggbb.`)
+		}
+		if(event.type === 'classify' && event.intensity !== undefined
+			&& (!Number.isFinite(event.intensity) || event.intensity < 0 || event.intensity > 1)) {
+			throw new Error(`Timeline classification ${event.sequence} intensity must be between 0 and 1.`)
 		}
 	}
 	for(const id of definitions.keys()) {
@@ -463,6 +473,8 @@ export const planDiceTimeline = (
 			const actions = classificationActions.get(effect) ?? []
 			actions.push(Object.freeze({
 				kind: 'classify', effect, dieId: event.dieId, pulses,
+				...(event.color === undefined ? {} : { color: event.color }),
+				...(event.intensity === undefined ? {} : { intensity: event.intensity }),
 				eventSequences: Object.freeze([event.sequence])
 			}))
 			classificationActions.set(effect, actions)

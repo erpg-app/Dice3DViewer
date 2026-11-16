@@ -198,6 +198,14 @@ export interface ExcludeTimelineEvent extends DiceTimelineEventBase {
 export interface ClassifyTimelineEvent extends DiceTimelineEventBase {
 	readonly type: 'classify'
 	readonly outcome: 'success' | 'failure' | 'neutral' | 'critical-success' | 'critical-failure'
+	/**
+	 * Color of this die's answer (`#rgb` or `#rrggbb`) instead of the effect's
+	 * color. A die with its own color also sends a ring across the table,
+	 * whatever the outcome.
+	 */
+	readonly color?: string
+	/** Glow of this die's pulse (0..1) instead of the effect's intensity; `0` leaves only the ring. */
+	readonly intensity?: number
 }
 
 export type DiceTimelineEvent =
@@ -509,6 +517,18 @@ export interface ViewerOptions {
 	readonly shadowResolution?: number
 	readonly lightIntensity?: number
 	readonly antialias?: boolean
+	/**
+	 * Highest device pixel ratio the canvas is drawn at (0.5..4). Phones report 3
+	 * or more; a lower cap saves fill rate where the dice are small. Default `2`.
+	 */
+	readonly maxPixelRatio?: number
+	/**
+	 * Frames drawn per second on screens faster than this (24..240), or `0` for
+	 * every frame of the screen. A frame is only skipped when the screen is at
+	 * least two thirds faster, so the pacing stays even: 120 Hz draws at 60,
+	 * 144 Hz at 72, and 60 or 90 Hz screens are left alone. Default `60`.
+	 */
+	readonly maxFps?: number
 	readonly scale?: number
 	/** @deprecated Travel time of the v2 kinematic mode; ignored in v3. */
 	readonly duration?: number

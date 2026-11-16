@@ -367,6 +367,8 @@ O merge é profundo por efeito: no exemplo, mudar `style` não apaga `enabled`, 
 | `shadowTransparency` | `number` | `0.8` | intensidade das sombras |
 | `lightIntensity` | `number` | `1` | multiplicador das luzes |
 | `antialias` | `boolean` | `true` | atributo do contexto WebGL; construção |
+| `maxPixelRatio` | `number` | `2` | maior device pixel ratio em que o canvas é desenhado (`0.5–4`); em celulares (ratio 3 ou mais) um teto menor economiza preenchimento; aplicado no próximo `resize` |
+| `maxFps` | `number` | `60` | quadros por segundo em telas mais rápidas que isso (`24–240`; `0` desenha todo quadro da tela); só pula quadro quando a tela é pelo menos dois terços mais rápida, então 120 Hz desenha a 60, 144 Hz a 72, e 60 ou 90 Hz não mudam |
 | `scale` | `number` | `5` | escala dos objetos |
 | `delay` | `number` | `10` ms | intervalo de liberação por corpo |
 | `wallPadding` | `number` | `0.25` | recuo interno entre a borda visível e a área útil, em unidades do palco |

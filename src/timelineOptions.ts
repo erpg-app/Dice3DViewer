@@ -154,6 +154,8 @@ export const createViewerOptions = (options: ViewerOptions): RequiredViewerOptio
 	shadowResolution: options.shadowResolution ?? 1024,
 	lightIntensity: options.lightIntensity ?? 1,
 	antialias: options.antialias ?? true,
+	maxPixelRatio: options.maxPixelRatio ?? 2,
+	maxFps: options.maxFps ?? 60,
 	scale: options.scale ?? 5,
 	duration: options.duration ?? 1100,
 	delay: options.delay ?? 10,
@@ -238,6 +240,12 @@ export const validateViewerOptions = (options: RequiredViewerOptions): void => {
 	}
 	assertBoolean(options.enableShadows, 'enableShadows')
 	assertBoolean(options.antialias, 'antialias')
+	if(!Number.isFinite(options.maxPixelRatio) || options.maxPixelRatio < 0.5 || options.maxPixelRatio > 4) {
+		throw new Error('Viewer option maxPixelRatio must be between 0.5 and 4.')
+	}
+	if(options.maxFps !== 0 && (!Number.isFinite(options.maxFps) || options.maxFps < 24 || options.maxFps > 240)) {
+		throw new Error('Viewer option maxFps must be 0 or between 24 and 240.')
+	}
 	if(!Number.isFinite(options.shadowTransparency)
 		|| options.shadowTransparency < 0
 		|| options.shadowTransparency > 1) {
