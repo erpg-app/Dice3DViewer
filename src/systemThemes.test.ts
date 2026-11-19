@@ -192,7 +192,7 @@ describe('system dice themes', () => {
 			},
 			{
 				id: 'generic-d3',
-				sides: 6,
+				sides: 3,
 				value: 2,
 				theme: undefined,
 				discarded: true

@@ -202,7 +202,7 @@ await viewer.display(createMixedDisplayRequest({
 ```
 
 O adaptador preserva a ordem e `physicalValue`, aplica automaticamente os
-temas de `profileId`, converte d3 genérico para a geometria d6 e omite por
+temas de `profileId`, mantém o d3 genérico como d3 e omite por
 padrão formatos genéricos sem representação física, como `dF`. Use
 `unsupportedDice: 'error'` para rejeitá-los em vez de omitir. Para Fate 3D,
 use `fate()` na notação mista: ele preserva a face d6, enquanto o `dF`
@@ -471,15 +471,26 @@ ficaram.
 | Tipo | Valores aceitos | Representação |
 |---|---:|---|
 | d2 | 1–2 | moeda procedural; `1` é frente e `2` é verso |
+| d3 | 1–3 | prisma triangular procedural arredondado, de pontas abauladas; lê-se a faixa que fica em cima |
 | d4 | 1–4 | poliedro |
+| d5 | 1–5 | prisma pentagonal procedural de pontas; lê-se a faixa de cima |
 | d6 | 1–6 | poliedro |
+| d7 | 1–7 | prisma heptagonal procedural de pontas; lê-se a faixa de cima |
 | d8 | 1–8 | poliedro |
 | d10 | 1–10 | poliedro |
 | d12 | 1–12 | poliedro |
+| d14 | 1–14 | trapezoedro heptagonal procedural |
+| d16 | 1–16 | bipirâmide octogonal procedural |
 | d20 | 1–20 | poliedro |
+| d24 | 1–24 | icositetraedro deltoidal procedural |
+| d30 | 1–30 | triacontaedro rômbico procedural |
 | d100 | 1–100 | um resultado semântico apresentado por dois corpos |
 
-Valores precisam ser inteiros finitos dentro do intervalo. O d2 aceita exclusivamente `1` ou `2`. Não há d3 nativo; se necessário, a aplicação pode apresentá-lo em um d6, mantendo o valor 1–3.
+Valores precisam ser inteiros finitos dentro do intervalo. O d2 aceita exclusivamente `1` ou `2`.
+
+### Dados irregulares (d3, d5, d7, d14, d16, d24, d30)
+
+São os dados incomuns vendidos como "Zocchi dice" (os funky dice de Dungeon Crawl Classics). Eles não vêm do modelo do tema: forma, colisão e números são gerados em código, então funcionam em qualquer tema, sempre coloridos por `themeColor` e com a `skin` do viewer, como os dados do tema `default`. Faces opostas somam lados + 1; d3, d5 e d7 são prismas de 3, 5 e 7 lados com as arestas achatadas em faixas: o d3 é arredondado, com pontas abauladas, e o d5 e o d7 são "cristais" de pontas afiadas. O dado repousa num lado largo e o resultado é a faixa de cima, a mais clara (o lado largo oposto repete o valor, caso o dado pare ao contrário); os números correm ao longo do dado, as pontas não têm valor e o dado não fica em pé nelas. O 6 e o 9 levam uma marca nos dados de 14 lados ou mais. Texturas de relevo e símbolos de tema não se aplicam a eles.
 
 O limite padrão é de 120 **corpos visuais**. Como um d100 usa dois corpos, 60d100 atingem esse limite.
 

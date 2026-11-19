@@ -3,7 +3,7 @@ import { normalizeDisplayRequest, getDisplayBodyCount } from './displayRequest'
 import { DisplayCancelledError, isDisplayCancelledError, rethrowPresentationError } from './errors'
 import { WorkerRenderer } from './renderers/WorkerRenderer'
 import { loadModule } from './loadModule'
-import { particlesUrl, presetsUrl, sceneUrl } from './runtimeAssets'
+import { irregularUrl, particlesUrl, presetsUrl, sceneUrl } from './runtimeAssets'
 import { ThemeRepository } from './themeRepository'
 import {
 	createTimelineProgressTracker,
@@ -242,7 +242,7 @@ export class DiceResultViewer {
 	async #startRenderer(): Promise<DisplayRenderer> {
 		const context = (): RendererContext => ({
 			canvas: this.canvas,
-			effects: { particles: particlesUrl().href, presets: presetsUrl().href },
+			effects: { particles: particlesUrl().href, presets: presetsUrl().href, irregular: irregularUrl().href },
 			options: this.#options,
 			loadTheme: theme => this.#themes.load(theme)
 		})

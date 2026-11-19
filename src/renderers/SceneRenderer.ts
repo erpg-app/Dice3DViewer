@@ -29,6 +29,7 @@ import { DiceGL, lookAt, multiply, perspective, type DrawState, type FrameSetup,
 import { AssetLibrary, parseHexColor, type CoinGeometry, type ModelDieType } from '../render/assets'
 import type { ImageLoader } from '../render/images'
 import { getCoinAccentColor, getCoinTargetQuaternion } from '../render/coinTheme'
+import { isProceduralSides, type ProceduralDieType } from '../render/proceduralSides'
 import { faceTargetQuaternion, type DiceShape } from '../engine/shape'
 import { sampleTrack, type Track } from '../engine/track'
 import {
@@ -65,7 +66,7 @@ interface VisualRecipe {
 	readonly config: ResolvedThemeConfig
 	readonly themeColor: string
 	readonly skin: DiceSkinOptions | null
-	readonly type: ModelDieType | 'coin'
+	readonly type: ModelDieType | ProceduralDieType | 'coin'
 }
 
 interface Entry {
@@ -134,7 +135,7 @@ interface SceneContext extends Omit<RendererContext, 'canvas'> {
 }
 
 /** Per-geometry mass profile of the v2 physics calibration. */
-const TYPE_MASS: Readonly<Record<number, number>> = { 2: 0.7, 4: 0.82, 6: 1, 8: 0.92, 10: 0.88, 12: 1.08, 20: 1.18, 100: 0.88 }
+const TYPE_MASS: Readonly<Record<number, number>> = { 2: 0.7, 3: 1, 4: 0.82, 5: 0.88, 6: 1, 7: 0.96, 8: 0.92, 10: 0.88, 12: 1.08, 14: 0.96, 16: 0.96, 20: 1.18, 24: 1.14, 30: 1.2, 100: 0.88 }
 /** Discarded dice keep their opacity and lose color, so the kept ones stand out. */
 const DISCARDED_SATURATION = 0.05
 /** A new presentation fades the previous dice out instead of removing them at once. */
@@ -560,6 +561,23 @@ export class SceneRenderer implements DisplayRenderer {
 			})
 			return { die: normalized, config, entries }
 		}
+		if(isProceduralSides(normalized.sides)) {
+			await assets.loadProcedural(this.#context!.effects.irregular)
+			const made = recipe(`d${normalized.sides}`)
+			entries.push({
+				...base,
+				dieId: normalized.id,
+				name: normalized.id,
+				sides: normalized.sides,
+				value: normalized.value,
+				shape: assets.proceduralShape(normalized.sides, options.scale * options.colliderScale),
+				visual: await this.#buildVisual(made),
+				recipe: made,
+				accentColor: normalized.themeColor,
+				glyphUps: assets.proceduralGeometry(normalized.sides).readUps
+			})
+			return { die: normalized, config, entries }
+		}
 		const model = await assets.loadModel(config.meshFilePath)
 		const orientation = await assets.glyphOrientation(config)
 		const values = this.#bodyValues(normalized.sides, normalized.value)
@@ -596,8 +614,15 @@ export class SceneRenderer implements DisplayRenderer {
 			])
 			return { kind: 'coin', geometry: assets.coinGeometry(config.coin, scale), front, back, edge }
 		}
+		const proceduralSides = Number(recipe.type.slice(1))
+		if(isProceduralSides(proceduralSides)) {
+			await assets.loadProcedural(this.#context!.effects.irregular)
+			const material = await assets.proceduralMaterial(config, themeColor, skin, proceduralSides)
+			return { kind: 'polyhedron', mesh: assets.proceduralGeometry(proceduralSides).mesh, material, scale }
+		}
+		const type = recipe.type as ModelDieType
 		const [model, material] = await Promise.all([assets.loadModel(config.meshFilePath), assets.material(config, themeColor, skin)])
-		const geometry = model.geometry.get(recipe.type)
+		const geometry = model.geometry.get(type)
 		if(!geometry) throw new Error(`${recipe.type} is unavailable in theme '${config.theme}'.`)
 		return { kind: 'polyhedron', mesh: geometry.visual, material, scale }
 	}

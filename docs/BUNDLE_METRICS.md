@@ -28,8 +28,8 @@ pacote npm (`npm pack --dry-run`).
 - nenhum JavaScript referencia Babylon, Havok ou `.wasm`, e `dist` não contém WebAssembly;
 - `package.json` não declara dependências de runtime e todos os exports existem;
 - `adapters` não contém código de renderização;
-- módulo principal até 15 KiB gzip, renderizador até 36 KiB, motor de partículas até 8 KiB, presets até 5 KiB e `adapters` até 3 KiB;
-- definições completas de efeitos carregam só o motor de partículas. Usar um preset carrega também o arquivo de presets.
+- módulo principal até 15 KiB gzip, renderizador até 36 KiB, motor de partículas até 8 KiB, presets até 5 KiB, dados irregulares até 4 KiB e `adapters` até 3 KiB;
+- definições completas de efeitos carregam só o motor de partículas. Usar um preset carrega também o arquivo de presets. Os dados irregulares (d3, d5, d7, d14, d16, d24, d30) têm arquivo próprio (~2,9 KiB gzip), baixado só quando um deles é rolado.
 
 O build remove espaços dos chunks finais e compacta os shaders GLSL. O shader
 de partículas é compilado no primeiro efeito.

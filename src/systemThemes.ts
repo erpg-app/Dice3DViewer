@@ -216,7 +216,7 @@ export const createSystemDisplayRequest = (
 	})
 }
 
-const genericDisplaySides: ReadonlySet<number> = new Set([2, 4, 6, 8, 10, 12, 20, 100])
+const genericDisplaySides: ReadonlySet<number> = new Set([2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 30, 100])
 
 const resolvePhysicalValue = (die: MixedDiePresentationInput): number =>
 	die.physicalValue ?? die.rawValue ?? die.value
@@ -227,14 +227,14 @@ const resolveMixedGenericDie = (
 ): ResolvedDie | null => {
 	const id = assertNonEmptyId(die.id, 'Mixed die id')
 	const sourceSides = die.sides
-	const displaySides = sourceSides === 3 ? 6 : sourceSides
+	const displaySides = sourceSides
 	if(typeof displaySides !== 'number' || !genericDisplaySides.has(displaySides)) {
 		if((options.unsupportedDice ?? 'omit') === 'omit') return null
 		throw new Error(`Mixed die '${id}' uses unsupported generic sides '${String(sourceSides)}'.`)
 	}
 
 	const value = resolvePhysicalValue(die)
-	const maximum = sourceSides === 3 ? 3 : displaySides
+	const maximum = displaySides
 	if(!Number.isInteger(value) || value < 1 || value > maximum) {
 		throw new Error(`Mixed die '${id}' physical value ${String(value)} is outside 1-${maximum}.`)
 	}

@@ -7,8 +7,12 @@
     "file": "chunks/particles-cc9ecc39.js",
     "src": "particles.js"
   },
+  "proceduralDice.js": {
+    "file": "chunks/proceduralDice-ca10f16b.js",
+    "src": "proceduralDice.js"
+  },
   "sceneWorker.js": {
-    "file": "chunks/sceneWorker-1f774108.js",
+    "file": "chunks/sceneWorker-f6451122.js",
     "src": "sceneWorker.js"
   },
   "src/index.ts": {

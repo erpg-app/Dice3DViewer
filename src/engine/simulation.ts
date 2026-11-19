@@ -1,5 +1,5 @@
 import { createSeededRandom } from '../random'
-import { chooseSymmetry, findFace, readFace, supportHeight, type DiceShape } from './shape'
+import { chooseValueSymmetry, readFace, supportHeight, type DiceShape } from './shape'
 import { add, cross, dot, qrot, scale, sub, type Quat, type ReadonlyQuat, type ReadonlyVec3, type Vec3 } from './vector'
 
 /**
@@ -890,9 +890,8 @@ export function* simulateSteps(inputs: readonly SimulationBody[], options: Simul
 			landed.push({ value: reading.face.value, alignment: reading.alignment, readable: true })
 			continue
 		}
-		const target = findFace(body.input.shape, body.input.value)
-		const offset = target && reading.face.value !== null
-			? chooseSymmetry(body.input.shape, orientation, target, reading.face, body.input.readUp ?? target.readUp)
+		const offset = reading.face.value !== null
+			? chooseValueSymmetry(body.input.shape, orientation, body.input.value, reading.face, body.input.readUp)
 			: null
 		visualOffsets.push(offset ?? [0, 0, 0, 1])
 		if(body.input.retoss) {

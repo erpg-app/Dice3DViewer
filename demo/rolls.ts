@@ -6,7 +6,7 @@ import type { DiceResultViewer, DiceSides, DiceTimelineEvent, TimelineDieDefinit
  * repository) and dice3dview only presents it.
  */
 
-const SUPPORTED_SIDES: ReadonlySet<number> = new Set([2, 4, 6, 8, 10, 12, 20, 100])
+const SUPPORTED_SIDES: ReadonlySet<number> = new Set([2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 30, 100])
 
 type DiceEvent = { readonly subject: string; readonly type: string; readonly reason?: string; readonly outcome?: string }
 
@@ -27,7 +27,7 @@ export const seedShowing = (notation: string, shows: string | undefined, base: s
 export const rollTimeline = async (viewer: DiceResultViewer, notation: string, seed: string): Promise<string> => {
 	const result = rollRpgDice(notation, { seed })
 	const supported = result.dice.filter(die => typeof die.sides === 'number' && SUPPORTED_SIDES.has(die.sides))
-	if(!supported.length) throw new Error(`${result.output}\nNenhum dado com modelo 3D (d2, d4, d6, d8, d10, d12, d20, d100).`)
+	if(!supported.length) throw new Error(`${result.output}\nNenhum dado com modelo 3D (d2–d8, d10, d12, d14, d16, d20, d24, d30, d100).`)
 	const ids = new Set(supported.map(die => die.id))
 	const dice: TimelineDieDefinition[] = supported.map(die => ({ id: die.id, sides: die.sides as DiceSides }))
 	const events = result.events.filter(event => event.subject === 'die' && ids.has(event.dieId)) as unknown as DiceTimelineEvent[]

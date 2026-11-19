@@ -219,7 +219,7 @@ d2 agora deve ser enviado diretamente:
 
 O contrato visual é frente/local `+Y` = valor `1` (`Identity`) e verso/local `−Y` = valor `2` (rotação `π`). Temas podem trocar as imagens, mas não devem inverter esse referencial.
 
-d3 ainda não é suportado nativamente. Uma adaptação temporária pode usar d6:
+O d3 passou a ser nativo (prisma triangular arredondado) e dispensa adaptação. Versões sem os dados irregulares precisavam de uma adaptação temporária com d6:
 
 ```ts
 const displayDie = die.sides === 3
@@ -270,6 +270,6 @@ Temas podem conter `extends` e `specularPower`, que não têm efeito na 2.0.4. N
 - [ ] somente valores resolvidos são enviados;
 - [ ] cancelamentos são ignorados de forma tipada;
 - [ ] d2 não é mais filtrado no frontend;
-- [ ] d3 recebe adaptação externa, se necessário;
+- [ ] d3 é enviado como `sides: 3` (nativo, ver "Dados irregulares" no README);
 - [ ] cleanup chama `dispose()`;
 - [ ] fluxo foi testado nos dois modos.

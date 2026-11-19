@@ -49,6 +49,8 @@ try {
 	await coldPage.evaluate(() => window.diceSmoke.runCancellation())
 	await coldPage.evaluate(() => window.diceSmoke.runDisplay({ sides: 100, values: [37] }))
 	await coldPage.evaluate(() => window.diceSmoke.runDisplay({ sides: 2, values: [1, 2] }))
+	// Procedural dice come from their own chunk, fetched on first use (worker and main thread).
+	for(const sides of [3, 5, 7, 14, 16, 24, 30]) await coldPage.evaluate(sides => window.diceSmoke.runDisplay({ sides, values: [1, sides] }), sides)
 	assert.equal(effectRequests.size, 0, 'ordinary rolls should not request particle assets')
 	await coldPage.evaluate(() => window.diceSmoke.runDisplay({
 		sides: 6,

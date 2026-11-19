@@ -63,6 +63,7 @@ export const collectBundleMetrics = ({ includePackage = false } = {}) => {
 		renderer: measure('sceneWorker.js'),
 		particles: measure('particles.js'),
 		presets: measure('particlePresets.js'),
+		irregular: measure('proceduralDice.js'),
 		allJavaScript: compressedMetrics(allJavaScript),
 		adapters: compressedMetrics([path.join(dist, 'adapters/index.js')]),
 		assets: compressedMetrics(visit(path.join(dist, 'assets'))),

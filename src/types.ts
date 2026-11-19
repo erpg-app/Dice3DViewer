@@ -1,4 +1,4 @@
-export type DiceSides = 2 | 4 | 6 | 8 | 10 | 12 | 20 | 100
+export type DiceSides = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 12 | 14 | 16 | 20 | 24 | 30 | 100
 
 /** v3 presents every result with the physics engine. */
 export type DisplayMode = 'physics'
@@ -604,7 +604,7 @@ export interface ResolvedThemeConfig extends ThemeConfig {
 
 export interface RendererContext {
 	readonly canvas: HTMLCanvasElement
-	readonly effects: { readonly particles: string; readonly presets: string }
+	readonly effects: { readonly particles: string; readonly presets: string; readonly irregular: string }
 	readonly options: Readonly<RequiredViewerOptions>
 	readonly loadTheme: (theme: string) => Promise<ResolvedThemeConfig>
 }

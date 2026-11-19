@@ -4,6 +4,19 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 
 ## [Não publicado]
 
+### Adicionado
+
+- dados irregulares d3, d5, d7, d14, d16, d24 e d30 ("Zocchi dice"), gerados
+  em código: forma, colisão e números não dependem do modelo do tema, então
+  valem para qualquer tema, com `themeColor` e `skin`; d3, d5 e d7 são
+  prismas lidos na faixa de cima (d3 arredondado; d5 e d7 de pontas);
+- `DiceSides` aceita os novos lados em `display()` e `displayTimeline()`.
+
+### Alterado
+
+- adaptadores: o d3 genérico deixa de ser convertido em d6 e é apresentado
+  como d3.
+
 ## [3.0.0-alpha.1] - 2026-11-16
 
 ### Adicionado

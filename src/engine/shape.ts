@@ -57,6 +57,12 @@ export interface ShapeOptions {
 	readonly readDown?: boolean
 	readonly readUps?: ReadonlyMap<number, ReadonlyVec3> | null
 	readonly inertiaK?: number
+	/**
+	 * Scales the tolerances that merge corners and compare faces (default 1,
+	 * loose enough for exported collider meshes). Exact planes whose faces differ
+	 * only slightly need a smaller value.
+	 */
+	readonly precision?: number
 }
 
 /** Monotonic angle without trigonometry, used to order face vertices. */
@@ -107,7 +113,7 @@ export const planesFromCollider = (
 export const createShape = (planes: readonly FacePlane[], options: ShapeOptions = {}): DiceShape => {
 	let inRadius = 0
 	for(const plane of planes) inRadius = Math.max(inRadius, plane.d)
-	const tolerance = inRadius * 0.02
+	const tolerance = inRadius * 0.02 * (options.precision ?? 1)
 	const sums: Vec3[] = [], counts: number[] = []
 	for(let i = 0; i < planes.length; i++) for(let j = i + 1; j < planes.length; j++) for(let k = j + 1; k < planes.length; k++) {
 		const a = planes[i]!, b = planes[j]!, c = planes[k]!
@@ -240,6 +246,26 @@ export const chooseSymmetry = (
 		}
 	}
 	return best
+}
+
+/**
+ * Symmetry showing `value` on the landed face. Dice whose faces are not all
+ * alike carry a value on more than one kind of face (d3 prism): the first face
+ * with that value that can be turned onto the landed one is used.
+ */
+export const chooseValueSymmetry = (
+	shape: DiceShape,
+	orientation: ReadonlyQuat,
+	value: number,
+	landed: ShapeFace,
+	readUp?: ReadonlyVec3
+): Quat | null => {
+	for(const target of shape.faces) {
+		if(target.value !== value) continue
+		const symmetry = chooseSymmetry(shape, orientation, target, landed, readUp ?? target.readUp)
+		if(symmetry) return symmetry
+	}
+	return null
 }
 
 /** Local direction that must point up for the given face to be read. */

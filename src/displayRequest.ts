@@ -8,12 +8,12 @@ import type {
 	ResolvedDie
 } from './types'
 
-const SUPPORTED_DICE: ReadonlySet<number> = new Set([2, 4, 6, 8, 10, 12, 20, 100])
+const SUPPORTED_DICE: ReadonlySet<number> = new Set([2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 30, 100])
 
 export const normalizeDisplaySides = (sides: unknown): DiceSides => {
 	const normalized = Number(sides)
 	if(!SUPPORTED_DICE.has(normalized)) {
-		throw new Error(`Unsupported display die: d${String(sides)}. Supported dice are d2, d4, d6, d8, d10, d12, d20, and d100.`)
+		throw new Error(`Unsupported display die: d${String(sides)}. Supported dice are d2, d3, d4, d5, d6, d7, d8, d10, d12, d14, d16, d20, d24, d30, and d100.`)
 	}
 	return normalized as DiceSides
 }

@@ -1,5 +1,7 @@
 import { createShape, planesFromCollider, type DiceShape } from '../engine/shape'
 import { createCoinShape } from './coinTheme'
+import type { ProceduralSides } from './proceduralSides'
+import { loadModule } from '../loadModule'
 import type { ReadonlyVec3, Vec3 } from '../engine/vector'
 import type { CoinTheme, DiceSkinOptions, ResolvedThemeConfig } from '../types'
 import type { DiceGL, GLMesh, GLTexture, SurfaceMaterial } from './gl'
@@ -113,6 +115,10 @@ export class AssetLibrary {
 	readonly #materials = new Map<string, Promise<SurfaceMaterial>>()
 	readonly #orientations = new Map<string, Promise<ReadonlyMap<string, ReadonlyMap<number, Vec3>>>>()
 	readonly #coinGeometry = new Map<string, CoinGeometry>()
+	readonly #procedural = new Map<ProceduralSides, ProceduralGeometry>()
+	readonly #proceduralShapes = new Map<string, DiceShape>()
+	#proceduralModule: Promise<ProceduralModule> | null = null
+	#proceduralDice: ProceduralModule | null = null
 	readonly #skins = new Map<string, Promise<{ readonly texture: GLTexture; readonly luminance: number }>>()
 
 	constructor(gl: DiceGL, imageLoader: ImageLoader = loadImage, baseUrl?: string) {
@@ -307,6 +313,75 @@ export class AssetLibrary {
 		return pending
 	}
 
+	/** Fetches the procedural dice module (once); the other procedural methods need it. */
+	async loadProcedural(url: string): Promise<void> {
+		this.#proceduralModule ??= loadModule<ProceduralModule>(url)
+		try {
+			this.#proceduralDice = await this.#proceduralModule
+		} catch(error) {
+			this.#proceduralModule = null
+			throw error
+		}
+	}
+
+	#proceduralSource(): ProceduralModule {
+		if(!this.#proceduralDice) throw new Error('Procedural dice were used before being loaded.')
+		return this.#proceduralDice
+	}
+
+	/** Mesh and number atlas of a die built in code (d3, d5, d7, d14, d16, d24, d30). */
+	proceduralGeometry(sides: ProceduralSides): ProceduralGeometry {
+		const cached = this.#procedural.get(sides)
+		if(cached) return cached
+		const dice = this.#proceduralSource()
+		const source = dice.createProceduralMesh(createShape, sides)
+		const geometry: ProceduralGeometry = {
+			mesh: this.#gl.createMesh(source.positions, source.normals, source.uvs, source.indices),
+			labels: this.#gl.createTexture(dice.drawProceduralLabels(source.labels)),
+			readUps: source.readUps
+		}
+		this.#procedural.set(sides, geometry)
+		return geometry
+	}
+
+	/** Physics shape of a procedural die at a world scale (cached). */
+	proceduralShape(sides: ProceduralSides, scale: number): DiceShape {
+		const key = `${sides}|${scale}`
+		const cached = this.#proceduralShapes.get(key)
+		if(cached) return cached
+		const shape = this.#proceduralSource().createProceduralShape(createShape, sides, scale)
+		this.#proceduralShapes.set(key, shape)
+		return shape
+	}
+
+	/**
+	 * Material of a procedural die: the die color (and skin) under its own
+	 * numbers. These dice are always colorized, whatever the theme material.
+	 */
+	proceduralMaterial(config: ResolvedThemeConfig, themeColor: string, skin: DiceSkinOptions | null, sides: ProceduralSides): Promise<SurfaceMaterial> {
+		const key = `procedural|${sides}|${themeColor}|${skinKey(skin)}`
+		const cached = this.#materials.get(key)
+		if(cached) return cached
+		const pending = (async (): Promise<SurfaceMaterial> => {
+			const base = parseHexColor(themeColor)
+			const layer = await this.#skinLayer(skin, base)
+			return {
+				color: base,
+				emissive: layer.fields.skin ? [0.05, 0.05, 0.05] : [base[0] * 0.18, base[1] * 0.18, base[2] * 0.18],
+				specular: [0.35, 0.35, 0.35],
+				diffuse: this.proceduralGeometry(sides).labels,
+				diffuseLevel: config.material.diffuseLevel ?? 1,
+				// Light numbers in the atlas: light bodies show them inverted.
+				invertDiffuse: layer.lightBody ?? isLightColor(themeColor),
+				colorMask: true,
+				...layer.fields
+			}
+		})()
+		this.#materials.set(key, pending)
+		pending.catch(() => this.#materials.delete(key))
+		return pending
+	}
+
 	coinGeometry(coin: CoinTheme, scale: number): CoinGeometry {
 		const diameter = Math.max(0.3, Number(coin.diameter) || 1) * scale * 0.14
 		const thickness = Math.max(0.04, Number(coin.thickness) || 0.12) * scale * 0.14
@@ -384,6 +459,12 @@ export class AssetLibrary {
 		for(const geometry of this.#coinGeometry.values()) {
 			for(const mesh of [geometry.front, geometry.back, geometry.edge]) this.#gl.deleteMesh(mesh)
 		}
+		for(const geometry of this.#procedural.values()) {
+			this.#gl.deleteMesh(geometry.mesh)
+			this.#gl.deleteTexture(geometry.labels)
+		}
+		this.#procedural.clear()
+		this.#proceduralShapes.clear()
 		this.#textures.clear()
 		this.#models.clear()
 		this.#materials.clear()
@@ -403,7 +484,17 @@ export class AssetLibrary {
 		this.#models.clear()
 		this.#materials.clear()
 		this.#coinGeometry.clear()
+		this.#procedural.clear()
 	}
+}
+
+type ProceduralModule = typeof import('./proceduralDice')
+
+export interface ProceduralGeometry {
+	readonly mesh: GLMesh
+	/** White numbers on transparent, one cell per face. */
+	readonly labels: GLTexture
+	readonly readUps: ReadonlyMap<number, Vec3>
 }
 
 export interface CoinGeometry {

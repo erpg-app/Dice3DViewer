@@ -15,6 +15,8 @@ const BUDGETS = Object.freeze({
 	particlesGzip: 8 * 1024,
 	/** Built-in particle presets, fetched only when a preset name is used. */
 	presetsGzip: 5 * 1024,
+	/** Procedural dice (d3, d5, d7, d14, d16, d24, d30), fetched only when one of them is rolled. */
+	irregularGzip: 4 * 1024,
 	adaptersGzip: 3 * 1024
 })
 
@@ -57,7 +59,7 @@ const adapterSource = readFileSync(path.join(dist, 'adapters/index.js'), 'utf8')
 if(/DiceResultViewer|getContext|WebGL/.test(adapterSource)) fail('the adapters entrypoint contains renderer code.')
 
 const manifest = JSON.parse(readFileSync(path.join(dist, 'manifest.json'), 'utf8'))
-const runtimeAssets = ['sceneWorker.js', 'particles.js', 'particlePresets.js']
+const runtimeAssets = ['sceneWorker.js', 'particles.js', 'particlePresets.js', 'proceduralDice.js']
 const initial = staticClosure(['src/index.ts'], manifest)
 const librarySource = readFileSync(path.join(dist, 'dice3dview.es.js'), 'utf8')
 for(const key of runtimeAssets) {
@@ -80,7 +82,8 @@ if(metrics.library.gzipBytes > BUDGETS.libraryGzip) fail(`library is ${metrics.l
 if(metrics.renderer.gzipBytes > BUDGETS.rendererGzip) fail(`renderer is ${metrics.renderer.gzipBytes} B gzip (budget ${BUDGETS.rendererGzip}).`)
 if(metrics.particles.gzipBytes > BUDGETS.particlesGzip) fail(`particle chunk is ${metrics.particles.gzipBytes} B gzip (budget ${BUDGETS.particlesGzip}).`)
 if(metrics.presets.gzipBytes > BUDGETS.presetsGzip) fail(`presets chunk is ${metrics.presets.gzipBytes} B gzip (budget ${BUDGETS.presetsGzip}).`)
+if(metrics.irregular.gzipBytes > BUDGETS.irregularGzip) fail(`procedural dice chunk is ${metrics.irregular.gzipBytes} B gzip (budget ${BUDGETS.irregularGzip}).`)
 if(metrics.adapters.gzipBytes > BUDGETS.adaptersGzip) fail(`adapters entry is ${metrics.adapters.gzipBytes} B gzip (budget ${BUDGETS.adaptersGzip}).`)
 
-console.log(JSON.stringify({ library: metrics.library, renderer: metrics.renderer, particles: metrics.particles, presets: metrics.presets, adapters: metrics.adapters, budgets: BUDGETS }, null, 2))
+console.log(JSON.stringify({ library: metrics.library, renderer: metrics.renderer, particles: metrics.particles, presets: metrics.presets, irregular: metrics.irregular, adapters: metrics.adapters, budgets: BUDGETS }, null, 2))
 console.log('Bundle structure passed: shared renderer, optional effects, renderer-free adapters and size budgets.')

@@ -21,7 +21,7 @@ import {
  * `?n=3d6!&seed=abc&color=%23ff0a7a&timeline=0`.
  */
 
-const SUPPORTED_SIDES: ReadonlySet<number> = new Set([2, 4, 6, 8, 10, 12, 20, 100])
+const SUPPORTED_SIDES: ReadonlySet<number> = new Set([2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 30, 100])
 const SYSTEM_CALL = /(?:^|;)\s*(?:as|assim|assimilacao|assimilation|dagger|daggerheart|dh|fate|fatedice|v5|vampire|vampirev5|vampiro)\s*\(/i
 
 interface Example {
@@ -45,6 +45,7 @@ const TIMELINE_EXAMPLES: readonly Example[] = [
 	{ label: 'd%', notation: 'd%' },
 	{ label: 'moedas', notation: '4d2' },
 	{ label: 'kit d4–d20', notation: 'd4+d6+d8+d10+d12+d20' },
+	{ label: 'dados irregulares', notation: 'd3+d5+d7+d14+d16+d24+d30' },
 	{ label: '12d6', notation: '12d6' },
 	{ label: '60d6', notation: '60d6' }
 ]
@@ -129,7 +130,7 @@ const genericPresentation = (notation: string, seed: string, id: string, themeCo
 	const ids = new Set(supported.map(die => die.id))
 	const skipped = result.dice.length - supported.length
 	const text = `${result.output}${skipped ? `\n(${skipped} dado(s) sem modelo 3D omitido(s): d3/dF usam fate() ou mixed)` : ''}`
-	if(!supported.length) throw new Error(`${result.output}\nNenhum dado com modelo 3D (d2, d4, d6, d8, d10, d12, d20, d100).`)
+	if(!supported.length) throw new Error(`${result.output}\nNenhum dado com modelo 3D (d2–d8, d10, d12, d14, d16, d20, d24, d30, d100).`)
 	if(!timelineInput.checked) {
 		const dice: ResolvedDie[] = supported.map(die => ({
 			id: die.id,

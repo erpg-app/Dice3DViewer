@@ -139,7 +139,7 @@ declare class DiceResultViewer {
 export { DiceResultViewer }
 export default DiceResultViewer;
 
-export declare type DiceSides = 2 | 4 | 6 | 8 | 10 | 12 | 20 | 100;
+export declare type DiceSides = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 12 | 14 | 16 | 20 | 24 | 30 | 100;
 
 /** How the skin image combines with the die color underneath (image editor layer modes). */
 export declare type DiceSkinBlend = 'normal' | 'multiply' | 'screen' | 'overlay';

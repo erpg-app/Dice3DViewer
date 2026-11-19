@@ -32,7 +32,8 @@ const standaloneRuntime = (): Plugin => {
 			const entries = {
 				sceneUrl: 'src/renderers/sceneWorker.ts',
 				particlesUrl: 'src/render/particles.ts',
-				presetsUrl: 'src/render/particlePresets.ts'
+				presetsUrl: 'src/render/particlePresets.ts',
+				irregularUrl: 'src/render/proceduralDice.ts'
 			}
 			const urls = await Promise.all(Object.entries(entries).map(async ([name, entry]) => {
 				const result = await build({

@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url'
 import { createShape, faceTargetQuaternion, planesFromCollider, type DiceShape } from '../src/engine/shape'
 import { createPhysicsThrow } from '../src/engine/physicsThrow'
 import type { ThrowBody, ThrowOptions } from '../src/engine/throw'
+import { createProceduralShape } from '../src/render/proceduralDice'
+import { isProceduralSides } from '../src/render/proceduralSides'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const model = JSON.parse(readFileSync(path.join(root, 'public/assets/dice-box/themes/default/default.json'), 'utf8')) as {
@@ -24,6 +26,12 @@ const shapes = new Map<string, DiceShape>()
 const shapeOf = (type: string): DiceShape => {
 	const cached = shapes.get(type)
 	if(cached) return cached
+	const sides = Number(type.slice(1))
+	if(isProceduralSides(sides)) {
+		const shape = createProceduralShape(createShape, sides, 5 * 1.02)
+		shapes.set(type, shape)
+		return shape
+	}
 	const collider = model.meshes.find(mesh => mesh.name === `${type}_collider`)
 	if(!collider) throw new Error(`Missing ${type} collider.`)
 	const positions = collider.positions.map((v, i) => i % 3 === 2 ? -v : v)
@@ -44,6 +52,12 @@ const SCENARIOS: Readonly<Record<string, readonly string[]>> = {
 	'4d6': Array.from({ length: 4 }, () => 'd6'),
 	'd4-d20 kit': ['d4', 'd6', 'd8', 'd10', 'd12', 'd20'],
 	'8d10': Array.from({ length: 8 }, () => 'd10'),
+	'irregular kit': ['d3', 'd5', 'd7', 'd14', 'd16', 'd24', 'd30'],
+	'12d20': Array.from({ length: 12 }, () => 'd20'),
+	'12d30': Array.from({ length: 12 }, () => 'd30'),
+	'12d16': Array.from({ length: 12 }, () => 'd16'),
+	'8d3': Array.from({ length: 8 }, () => 'd3'),
+	'crystals': ['d3', 'd3', 'd5', 'd5', 'd5', 'd7', 'd7', 'd7'],
 	'12d6': Array.from({ length: 12 }, () => 'd6'),
 	'24d6': Array.from({ length: 24 }, () => 'd6'),
 	'60d6': Array.from({ length: 60 }, () => 'd6'),
@@ -63,7 +77,7 @@ for(const [name, types] of Object.entries(SCENARIOS)) {
 	for(let run = 0; run < runs; run++) {
 		const bodies: ThrowBody[] = types.map((type, index) => {
 			const shape = shapeOf(type)
-			const faces = shape.faces.map(face => face.value!)
+			const faces = shape.faces.flatMap(face => face.value === null ? [] : [face.value])
 			const value = faces[(run * 7 + index * 3) % faces.length]!
 			return { shape, value, canonicalTarget: faceTargetQuaternion(shape, value), coin: false, mass: 1 }
 		})

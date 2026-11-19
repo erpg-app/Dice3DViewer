@@ -291,7 +291,7 @@ await viewer.display(createMixedDisplayRequest({
 
 Para dados com `profileId`, o adaptador aplica o tema simbólico e valida os
 lados do perfil. Para dados genéricos, usa `physicalValue`, depois `rawValue`
-e por último `value`. d3 usa a geometria d6; lados sem geometria, inclusive o
+e por último `value`. d3, d5, d7, d14, d16, d24 e d30 usam os dados procedurais; lados sem geometria, inclusive o
 `dF` genérico, são omitidos por padrão. `unsupportedDice: 'error'` transforma
 essa omissão em erro. IDs duplicados no lote são rejeitados.
 
@@ -300,7 +300,7 @@ essa omissão em erro. IDs duplicados no lote são rejeitados.
 - `request.id` deve ser uma string não vazia;
 - `dice` deve conter ao menos um item;
 - `mode` pode ser omitido, `'physics'` ou o legado `'kinematic'`, que é apresentado com física e gera um aviso único no console; outros valores são rejeitados;
-- os únicos lados são d2, d4, d6, d8, d10, d12, d20 e d100;
+- os únicos lados são d2, d3, d4, d5, d6, d7, d8, d10, d12, d14, d16, d20, d24, d30 e d100;
 - `value` deve ser inteiro finito entre `1` e `sides`;
 - d2 aceita exclusivamente `1` ou `2`;
 - um ID de dado vazio recebe `${request.id}-die-${index}`;
@@ -310,7 +310,7 @@ essa omissão em erro. IDs duplicados no lote são rejeitados.
 - IDs duplicados não são rejeitados;
 - em runtime, lados e valores passam por `Number()`, embora TypeScript exija números.
 
-`maxDice` conta corpos visuais. d2–d20 usam um corpo; cada d100 usa dois.
+`maxDice` conta corpos visuais. d2–d30 usam um corpo; cada d100 usa dois.
 
 Na moeda d2, a frente cuja normal local é `+Y` representa o valor `1` e usa quaternion `Identity`. O verso cuja normal local é `−Y` representa o valor `2` e usa rotação `π`. Esse referencial é fixo mesmo quando o tema troca as texturas por cara/coroa ou outros símbolos.
 
