@@ -3,7 +3,17 @@ export { DISPLAY_CANCELLED_CODE, DisplayCancelledError, isDisplayCancelledError 
 export { DEFAULT_TIMELINE_OPTIONS } from './timelineOptions'
 export { DICE_LOOK_FORMAT, DICE_LOOK_VERSION, createDiceLook, diceLookOptions } from './diceLook'
 export type { DiceLook, DiceLookOptions } from './diceLook'
-export { PARTICLE_MOMENTS, PARTICLE_ORIENTATIONS, PARTICLE_PRESET_NAMES, PARTICLE_SHAPES } from './particleOptions'
+export {
+	DICE_GLOW_MODES,
+	DICE_SETTLE_MOTIONS,
+	PARTICLE_LAYER_LIMIT,
+	PARTICLE_MOMENTS,
+	PARTICLE_ORIENTATIONS,
+	PARTICLE_PRESET_NAMES,
+	PARTICLE_SHAPES,
+	PARTICLE_SPAWNS,
+	particleLayers
+} from './particleOptions'
 export { loadParticlePresets } from './particlePresetLoader'
 export {
 	SYSTEM_THEME_PROFILES,
@@ -30,7 +40,13 @@ export type {
 	CoinFaceTheme,
 	CoinTheme,
 	CollisionEvent,
+	DiceFinishMask,
+	DiceFinishOptions,
+	DiceSkinLayer,
+	DiceGlowMode,
 	DiceGlowOptions,
+	DiceMotionOptions,
+	DiceSettleMotion,
 	DiceParticleOptions,
 	DiceParticlePreset,
 	DiceSkinBlend,
@@ -52,7 +68,9 @@ export type {
 	ParticleOrientation,
 	ParticleShape,
 	ParticleEffectDefinition,
+	ParticleEmitterLayers,
 	ParticleEmitterOptions,
+	ParticleSpawn,
 	RerollTimelineEvent,
 	RollTimelineEvent,
 	ResolvedDie,

@@ -6,7 +6,8 @@ import type { DiceParticlePreset, ParticleEffectDefinition, ParticleEmitterOptio
  *
  * Distances are world units (a die is about 1.2 across), times are seconds.
  * Every preset reacts to all eight moments of a roll; `ground` emits per unit
- * of distance rolled on the table.
+ * of distance rolled on the table. A moment may stack emitters (a flash, then
+ * debris, then smoke).
  */
 
 /** Colors of the confetti preset (one per piece). */
@@ -20,6 +21,14 @@ const STAR_FADE = ['#ffffff', '#ffffffaa', '#ffffff00']
 const HEARTS = ['#ff4d6d', '#ff8fab', '#ffb3c6', '#ff006e', '#ffffff']
 const LIGHTNING = ['#ffffff', '#e0f4ff', '#8cc8ff', '#3a6bff00']
 const SNOW = ['#ffffff', '#e6f6ffcc', '#bfe6ff00']
+const PETALS = ['#ffb7d5', '#ffd6e8', '#ffffff', '#ff8fb8', '#ffe3ef']
+const SOAP = ['#bfe9ff', '#e6d4ff', '#c9fff0', '#ffd9f2', '#ffffff']
+const GEMS = ['#7df9ff', '#b388ff', '#ffffff', '#5ce1e6', '#e0aaff']
+const MOON = ['#ffffff', '#e8ecffcc', '#aab8ff00']
+const VOID = ['#ffffff', '#d9b3ff', '#8a4dff', '#3a16a800']
+const EMBER = ['#fff1a8', '#ffa133', '#ff4d1a00']
+/** Shock wave on the table: one ring that opens and fades. */
+const wave = (colors: string[], size = 0.5, grow = 3.2): ParticleEmitterOptions => ({ amount: 1, life: [0.4, 0.55], size: [size, size], speed: [0, 0], direction: 'out', colors, grow, shape: 'ring' })
 
 // Hits: the same burst for a die landing on the table and for dice hitting
 // each other (collisions play at 70% of the hit strength).
@@ -52,14 +61,26 @@ export const PARTICLE_PRESETS: Readonly<Record<DiceParticlePreset, ParticleEffec
 		auraSeconds: 2.5
 	},
 	fire: {
-		trail: { amount: 80, life: [0.22, 0.5], size: [0.26, 0.5], speed: [0.2, 0.9], direction: 'up', gravity: -7, drag: 2.5, colors: ['#ffe9a899', '#ffb14acc', '#ff6a1ab3', '#c9260b80', '#3d0a0500'], grow: 0.15 },
+		trail: [
+			{ amount: 80, life: [0.22, 0.5], size: [0.26, 0.5], speed: [0.2, 0.9], direction: 'up', gravity: -7, drag: 2.5, colors: ['#ffe9a899', '#ffb14acc', '#ff6a1ab3', '#c9260b80', '#3d0a0500'], grow: 0.15, heat: 0.25 },
+			{ amount: 26, life: [0.5, 1.1], size: [0.03, 0.07], speed: [0.4, 1.4], direction: 'up', gravity: -2.5, drag: 1, turbulence: 7, colors: EMBER, flicker: 0.6, heat: 0.8 }
+		],
 		ground: { amount: 20, life: [0.6, 1.4], size: [0.12, 0.24], speed: [0, 0.06], direction: 'out', drag: 2, colors: ['#ffd27a', '#ff8c2acc', '#c9260b88', '#3d0a0500'], flicker: 0.5, grow: 0.6 },
 		impact: FIRE_HIT,
 		collision: FIRE_HIT,
 		settle: { amount: 22, life: [0.3, 0.6], size: [0.25, 0.5], speed: [0.2, 0.8], direction: 'up', gravity: -6, drag: 2, colors: ['#fff4c2', '#ffb347', '#ff5e1a', '#8c1a0800'], grow: 0.2 },
 		aura: { amount: 26, life: [0.3, 0.6], size: [0.2, 0.4], speed: [0.1, 0.5], direction: 'up', gravity: -6, drag: 2, colors: ['#fff1b8', '#ffab40', '#ff5a1acc', '#6b120600'], grow: 0.2 },
-		explode: { amount: 60, life: [0.35, 0.8], size: [0.3, 0.7], speed: [2.5, 5.5], direction: 'sphere', gravity: -3, drag: 2.2, colors: ['#ffffff', '#ffd27a', '#ff6a1a', '#a3200acc', '#2a080400'], grow: 0.3 },
-		critical: { amount: 80, life: [0.5, 1], size: [0.3, 0.65], speed: [1, 3.5], direction: 'up', gravity: -5, drag: 1.8, swirl: 1.5, colors: ['#ffffff', '#ffe08a', '#ff8c2a', '#c9260b99', '#2a080400'], grow: 0.25 },
+		explode: [
+			wave(['#fff4c2', '#ff8c2a99', '#c9260b00'], 0.6),
+			{ amount: 60, life: [0.35, 0.8], size: [0.3, 0.7], speed: [2.5, 5.5], direction: 'sphere', gravity: -3, drag: 2.2, colors: ['#ffffff', '#ffd27a', '#ff6a1a', '#a3200acc', '#2a080400'], grow: 0.3, heat: 0.25 },
+			{ amount: 30, life: [0.6, 1.2], size: [0.03, 0.08], speed: [3, 7], direction: 'sphere', gravity: 6, drag: 1.2, colors: EMBER, stretch: 0.25, heat: 1, bounce: 0.5 },
+			{ amount: 10, life: [0.9, 1.5], size: [0.4, 0.7], speed: [0.3, 1], direction: 'up', gravity: -0.8, drag: 1.5, colors: ['#3a2a2466', '#2a1f1f44', '#14100f00'], blend: 'alpha', grow: 2.4, shape: 'smoke', spin: 0.6, delay: [0.15, 0.35] }
+		],
+		critical: [
+			wave(['#ffffff', '#ffb14a99', '#c9260b00'], 0.7, 3.6),
+			{ amount: 80, life: [0.5, 1], size: [0.3, 0.65], speed: [1, 3.5], direction: 'up', gravity: -5, drag: 1.8, swirl: 1.5, colors: ['#ffffff', '#ffe08a', '#ff8c2a', '#c9260b99', '#2a080400'], grow: 0.25, heat: 0.25 },
+			{ amount: 40, life: [0.8, 1.6], size: [0.03, 0.08], speed: [1, 3], direction: 'up', gravity: -2, drag: 0.8, turbulence: 8, colors: EMBER, flicker: 0.5, heat: 1, spawn: 'ring', spread: 0.6 }
+		],
 		auraSeconds: 3
 	},
 	arcane: {
@@ -107,7 +128,7 @@ export const PARTICLE_PRESETS: Readonly<Record<DiceParticlePreset, ParticleEffec
 		auraSeconds: 2.5
 	},
 	electric: {
-		trail: { amount: 90, life: [0.08, 0.2], size: [0.18, 0.34], speed: [1.5, 3.5], direction: 'sphere', drag: 6, colors: ['#ffffff', '#bfe9ff', '#5cc8ff99', '#2a6bff00'], flicker: 1, shape: 'spark' },
+		trail: { amount: 90, life: [0.08, 0.2], size: [0.18, 0.34], speed: [1.5, 3.5], direction: 'sphere', drag: 6, colors: ['#ffffff', '#bfe9ff', '#5cc8ff99', '#2a6bff00'], flicker: 1, shape: 'spark', heat: 0.7 },
 		ground: { amount: 18, life: [0.3, 0.7], size: [0.1, 0.2], speed: [0, 0.1], direction: 'out', drag: 2, colors: ['#e6f7ff', '#7fd4ffcc', '#2a8bff66', '#1a3bff00'], flicker: 1 },
 		impact: ELECTRIC_HIT,
 		collision: ELECTRIC_HIT,
@@ -221,8 +242,15 @@ export const PARTICLE_PRESETS: Readonly<Record<DiceParticlePreset, ParticleEffec
 		settle: { amount: 4, life: [0.12, 0.25], size: [0.8, 1.2], speed: [0.5, 1.5], direction: 'out', drag: 6, colors: LIGHTNING, flicker: 0.6, shape: 'bolt' },
 		aura: { amount: 8, life: [0.08, 0.18], size: [0.4, 0.7], speed: [0, 0.2], direction: 'sphere', drag: 5, colors: LIGHTNING, flicker: 0.8, shape: 'arc' },
 		explode: { amount: 10, life: [0.12, 0.3], size: [1, 1.6], speed: [3, 6], direction: 'sphere', drag: 6, colors: LIGHTNING, flicker: 0.6, shape: 'bolt' },
-		critical: { amount: 14, life: [0.15, 0.35], size: [1.2, 2], speed: [2, 5], direction: 'out', drag: 5, colors: LIGHTNING, flicker: 0.8, shape: 'bolt' },
-		link: { amount: 26, life: [0.08, 0.18], size: [1.05, 1.15], speed: [0, 0], grow: 1, colors: ['#ffffff', '#f0f9ff', '#a8d8ffdd', '#5a8cff00'], flicker: 0.3, shape: 'bolt', orient: 'random' },
+		critical: [
+			wave(['#ffffff', '#8cc8ffaa', '#3a6bff00'], 0.7, 3.6),
+			{ amount: 14, life: [0.15, 0.35], size: [1.2, 2], speed: [2, 5], direction: 'out', drag: 5, colors: LIGHTNING, flicker: 0.8, shape: 'bolt' },
+			{ amount: 30, life: [0.3, 0.7], size: [0.05, 0.1], speed: [3, 7], direction: 'out', gravity: 5, drag: 1.5, colors: LIGHTNING, stretch: 0.3, heat: 1, bounce: 0.5, delay: [0.05, 0.15] }
+		],
+		link: [
+			{ amount: 22, life: [0.07, 0.16], size: [1.05, 1.15], speed: [0, 0], grow: 1, colors: ['#ffffff', '#f0f9ff', '#a8d8ffdd', '#5a8cff00'], flicker: 0.3, shape: 'bolt', orient: 'random' },
+			{ amount: 8, life: [0.12, 0.22], size: [0.45, 0.6], speed: [0, 0], grow: 1, colors: ['#6fb8ff33', '#3a6bff00'] }
+		],
 		auraSeconds: 2,
 		linkDistance: 9,
 		linkSeconds: 2.5
@@ -250,5 +278,115 @@ export const PARTICLE_PRESETS: Readonly<Record<DiceParticlePreset, ParticleEffec
 		explode: { amount: 30, life: [0.8, 1.4], size: [0.16, 0.3], speed: [2, 4], direction: 'sphere', drag: 1.6, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' },
 		critical: { amount: 50, life: [1.2, 2], size: [0.2, 0.36], speed: [1, 2.6], direction: 'up', gravity: -0.8, drag: 1, swirl: 1.5, colors: STAR_FADE, palette: HEARTS, shape: 'heart', orient: 'upright' },
 		auraSeconds: 3
+	},
+	// Cherry blossom: petals that drift and tumble on the air.
+	sakura: {
+		trail: { amount: 26, life: [1, 1.8], size: [0.12, 0.2], speed: [0.2, 0.7], direction: 'sphere', gravity: 0.9, drag: 1.6, turbulence: 5, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 2.5 },
+		ground: { amount: 5, life: [1.8, 2.8], size: [0.1, 0.16], speed: [0, 0.05], direction: 'out', drag: 3, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 0.3 },
+		impact: { amount: 10, life: [0.9, 1.5], size: [0.1, 0.18], speed: [1, 2.6], direction: 'up', gravity: 2.5, drag: 1.6, turbulence: 4, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 5 },
+		collision: { amount: 6, life: [0.8, 1.3], size: [0.1, 0.16], speed: [1, 2.2], direction: 'sphere', gravity: 2, drag: 1.6, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 5 },
+		settle: [
+			wave(['#ffffff', '#ffb7d588', '#ff8fb800'], 0.5, 2.6),
+			{ amount: 14, life: [1.2, 2], size: [0.1, 0.18], speed: [0.6, 1.6], direction: 'out', gravity: 0.6, drag: 1.2, turbulence: 4, swirl: 1.5, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 3 }
+		],
+		aura: { amount: 6, life: [1.6, 2.6], size: [0.1, 0.16], speed: [0.1, 0.4], direction: 'up', gravity: 0.3, drag: 0.6, turbulence: 4, swirl: 1.2, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 2, spawn: 'ring' },
+		explode: { amount: 44, life: [1.2, 2], size: [0.11, 0.2], speed: [2, 4.5], direction: 'sphere', gravity: 1.5, drag: 1.6, turbulence: 5, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 6 },
+		critical: [
+			wave(['#ffffff', '#ffb7d5aa', '#ff8fb800'], 0.7, 3.4),
+			{ amount: 90, life: [1.6, 2.6], size: [0.11, 0.2], speed: [1.5, 4], direction: 'out', gravity: 0.5, drag: 1, turbulence: 5, swirl: 3, colors: PAPER, palette: PETALS, blend: 'alpha', grow: 1, shape: 'petal', spin: 5 }
+		],
+		auraSeconds: 4
+	},
+	// Soap bubbles: they rise, wobble and pop on every hit.
+	bubbles: {
+		trail: { amount: 22, life: [0.9, 1.6], size: [0.1, 0.24], speed: [0.1, 0.5], direction: 'up', gravity: -0.9, drag: 1.2, turbulence: 5, colors: STAR_FADE, palette: SOAP, grow: 1.3, shape: 'bubble', orient: 'upright' },
+		ground: { amount: 4, life: [1, 1.8], size: [0.08, 0.16], speed: [0, 0.05], direction: 'out', drag: 3, colors: ['#ffffffaa', '#ffffff55', '#ffffff00'], palette: SOAP, grow: 1.2, shape: 'bubble', orient: 'upright' },
+		impact: [wave(['#ffffff', '#bfe9ff88', '#bfe9ff00'], 0.35, 2.4), { amount: 9, life: [0.6, 1.1], size: [0.08, 0.2], speed: [0.8, 2], direction: 'up', gravity: -0.6, drag: 1.6, turbulence: 4, colors: STAR_FADE, palette: SOAP, grow: 1.3, shape: 'bubble', orient: 'upright' }],
+		collision: { amount: 8, life: [0.15, 0.3], size: [0.06, 0.12], speed: [2, 4], direction: 'sphere', drag: 3, colors: ['#ffffff', '#bfe9ff00'], shape: 'drop' },
+		settle: { amount: 12, life: [1, 1.8], size: [0.1, 0.26], speed: [0.3, 1], direction: 'up', gravity: -1, drag: 1, turbulence: 5, colors: STAR_FADE, palette: SOAP, grow: 1.4, shape: 'bubble', orient: 'upright' },
+		aura: { amount: 6, life: [1.4, 2.2], size: [0.08, 0.2], speed: [0.1, 0.4], direction: 'up', gravity: -0.8, drag: 0.6, turbulence: 5, colors: STAR_FADE, palette: SOAP, grow: 1.4, shape: 'bubble', orient: 'upright', spawn: 'ring', spread: 0.7 },
+		explode: [wave(['#ffffff', '#e6d4ff88', '#e6d4ff00'], 0.6), { amount: 36, life: [0.9, 1.6], size: [0.1, 0.28], speed: [1.5, 4], direction: 'sphere', gravity: -0.6, drag: 2, turbulence: 4, colors: STAR_FADE, palette: SOAP, grow: 1.3, shape: 'bubble', orient: 'upright' }],
+		critical: { amount: 60, life: [1.4, 2.4], size: [0.12, 0.34], speed: [0.6, 2.4], direction: 'up', gravity: -1.2, drag: 1, turbulence: 6, swirl: 1, colors: STAR_FADE, palette: SOAP, grow: 1.4, shape: 'bubble', orient: 'upright', delay: [0, 0.4] },
+		auraSeconds: 3.5
+	},
+	// Vortex: matter pulled back into orbit around each die.
+	vortex: {
+		trail: { amount: 70, life: [0.5, 1], size: [0.06, 0.14], speed: [0.6, 1.6], direction: 'sphere', drag: 0.6, attract: 14, swirl: 5, colors: VOID, stretch: 0.4, heat: 0.4 },
+		ground: { amount: 10, life: [1, 1.8], size: [0.2, 0.36], speed: [0, 0.05], direction: 'out', drag: 2, colors: ['#8a4dff55', '#5a2ad033', '#3a16a800'], grow: 1.6 },
+		impact: wave(['#ffffff', '#b388ff99', '#5a2ad000'], 0.45, 3),
+		collision: { amount: 14, life: [0.3, 0.6], size: [0.05, 0.12], speed: [2, 4.5], direction: 'out', drag: 2, swirl: 8, colors: VOID, stretch: 0.5, heat: 0.6 },
+		settle: { amount: 40, life: [0.8, 1.4], size: [0.05, 0.12], speed: [1.6, 2.6], direction: 'out', drag: 0.2, attract: 9, swirl: 3, colors: VOID, stretch: 0.5, heat: 0.5, spawn: 'ring' },
+		aura: { amount: 30, life: [1, 1.8], size: [0.04, 0.1], speed: [1.4, 2.2], direction: 'out', drag: 0.1, attract: 8, swirl: 2.5, colors: VOID, stretch: 0.5, heat: 0.4, spawn: 'ring' },
+		explode: [wave(['#ffffff', '#b388ffaa', '#5a2ad000'], 0.7, 3.6), { amount: 70, life: [0.6, 1.2], size: [0.06, 0.14], speed: [3, 6.5], direction: 'sphere', drag: 1.6, swirl: 6, colors: VOID, stretch: 0.4, heat: 0.7 }],
+		critical: [
+			{ amount: 110, life: [1, 1.8], size: [0.05, 0.13], speed: [2, 3.4], direction: 'out', drag: 0.1, attract: 7, swirl: 3.5, colors: VOID, stretch: 0.5, heat: 0.6, spawn: 'ring', spread: 1.6 },
+			{ ...wave(['#ffffff', '#d9b3ffaa', '#8a4dff00'], 0.8, 4), delay: [0.5, 0.5] }
+		],
+		auraSeconds: 3.5
+	},
+	// Meteor: a burning tail, a crater ring and debris that bounces away.
+	meteor: {
+		trail: [
+			{ amount: 40, life: [0.25, 0.5], size: [0.3, 0.55], speed: [0.6, 1.6], direction: 'back', drag: 2, colors: ['#ffffff', '#ffd27a', '#ff6a1acc', '#7a1a0800'], grow: 0.4, shape: 'comet', heat: 0.6 },
+			{ amount: 30, life: [0.5, 1], size: [0.03, 0.07], speed: [0.5, 1.6], direction: 'back', gravity: 2, drag: 1, turbulence: 5, colors: EMBER, heat: 1, bounce: 0.5 },
+			{ amount: 10, life: [0.7, 1.3], size: [0.25, 0.45], speed: [0.1, 0.4], direction: 'back', gravity: -0.5, drag: 2, colors: ['#4a3a3455', '#2a1f1f33', '#14100f00'], blend: 'alpha', grow: 2.2, shape: 'smoke', spin: 0.5 }
+		],
+		ground: { amount: 14, life: [1, 2], size: [0.14, 0.26], speed: [0, 0.05], direction: 'out', drag: 2, colors: ['#ffcf6b', '#ff6a1acc', '#7a1a0800'], flicker: 0.3, grow: 0.7 },
+		impact: [
+			wave(['#ffffff', '#ffb14a99', '#c9260b00'], 0.5, 3),
+			{ amount: 18, life: [0.5, 1], size: [0.06, 0.14], speed: [2.5, 5.5], direction: 'out', gravity: 9, drag: 0.8, colors: ['#fff3b0', '#ff9a3c', '#7a1a0800'], shape: 'shard', spin: 9, bounce: 0.55, heat: 0.5 }
+		],
+		collision: { amount: 16, life: [0.3, 0.7], size: [0.04, 0.09], speed: [2.5, 5.5], direction: 'sphere', gravity: 7, drag: 1, colors: EMBER, stretch: 0.3, heat: 1, bounce: 0.5 },
+		settle: { amount: 8, life: [0.9, 1.5], size: [0.3, 0.55], speed: [0.2, 0.6], direction: 'up', gravity: -0.8, drag: 1.5, colors: ['#4a322a77', '#2a1f1f55', '#14100f00'], blend: 'alpha', grow: 2.4, shape: 'smoke', spin: 0.6 },
+		aura: { amount: 12, life: [0.7, 1.3], size: [0.03, 0.07], speed: [0.3, 0.9], direction: 'up', gravity: -1.5, drag: 0.8, turbulence: 6, colors: EMBER, flicker: 0.6, heat: 1 },
+		explode: [
+			wave(['#ffffff', '#ffb14aaa', '#c9260b00'], 0.7, 3.6),
+			{ amount: 30, life: [0.4, 0.8], size: [0.35, 0.7], speed: [3.5, 7], direction: 'sphere', drag: 2.5, colors: ['#ffffff', '#ffd27a', '#ff6a1acc', '#7a1a0800'], grow: 0.4, shape: 'comet', heat: 0.6 },
+			{ amount: 26, life: [0.6, 1.2], size: [0.06, 0.14], speed: [3, 6.5], direction: 'sphere', gravity: 9, drag: 0.8, colors: ['#fff3b0', '#ff9a3c', '#7a1a0800'], shape: 'shard', spin: 10, bounce: 0.55 }
+		],
+		critical: [
+			wave(['#ffffff', '#ffd27aaa', '#ff6a1a00'], 0.8, 4),
+			{ amount: 34, life: [0.5, 1], size: [0.4, 0.8], speed: [3, 7], direction: 'out', drag: 2.2, colors: ['#ffffff', '#ffe08a', '#ff8c2acc', '#7a1a0800'], grow: 0.4, shape: 'comet', heat: 0.7 },
+			{ amount: 50, life: [0.8, 1.6], size: [0.03, 0.08], speed: [1, 4], direction: 'up', gravity: 3, drag: 0.8, turbulence: 6, colors: EMBER, heat: 1, bounce: 0.5, delay: [0.05, 0.25] }
+		],
+		auraSeconds: 3
+	},
+	// Crystal: splinters of gem that scatter and ring around the die.
+	crystal: {
+		trail: { amount: 34, life: [0.5, 1], size: [0.08, 0.18], speed: [0.3, 1], direction: 'sphere', gravity: 2, drag: 1.4, colors: STAR_FADE, palette: GEMS, shape: 'shard', spin: 6, heat: 0.5 },
+		ground: { amount: 8, life: [1.2, 2.2], size: [0.06, 0.12], speed: [0, 0.05], direction: 'out', drag: 3, colors: ['#ffffffcc', '#ffffff66', '#ffffff00'], palette: GEMS, flicker: 0.8, shape: 'diamond', spin: 0.3 },
+		impact: { amount: 16, life: [0.5, 0.9], size: [0.08, 0.16], speed: [2.2, 4.6], direction: 'out', gravity: 9, drag: 0.8, colors: STAR_FADE, palette: GEMS, shape: 'shard', spin: 11, bounce: 0.6, heat: 0.5 },
+		collision: { amount: 10, life: [0.3, 0.6], size: [0.08, 0.16], speed: [2, 4], direction: 'sphere', gravity: 7, drag: 1, colors: STAR_FADE, palette: GEMS, shape: 'shard', spin: 11, bounce: 0.6, heat: 0.6 },
+		settle: [
+			wave(['#ffffff', '#7df9ff99', '#b388ff00'], 0.5, 2.6),
+			{ amount: 12, life: [0.7, 1.2], size: [0.12, 0.22], speed: [0.2, 0.6], direction: 'out', drag: 2, colors: STAR_FADE, palette: GEMS, flicker: 0.6, shape: 'star', spin: 1, spawn: 'ring', spread: 0.8 }
+		],
+		aura: { amount: 9, life: [0.9, 1.6], size: [0.08, 0.18], speed: [0.05, 0.3], direction: 'up', gravity: -0.4, drag: 0.6, colors: STAR_FADE, palette: GEMS, flicker: 1, shape: 'star', spin: 1, spawn: 'shell', spread: 0.7 },
+		explode: [wave(['#ffffff', '#b388ffaa', '#7df9ff00'], 0.7, 3.4), { amount: 50, life: [0.6, 1.2], size: [0.1, 0.2], speed: [3, 6.5], direction: 'sphere', gravity: 8, drag: 1, colors: STAR_FADE, palette: GEMS, shape: 'shard', spin: 12, bounce: 0.6, heat: 0.6 }],
+		critical: [
+			wave(['#ffffff', '#7df9ffaa', '#b388ff00'], 0.8, 4),
+			{ amount: 70, life: [0.9, 1.6], size: [0.1, 0.22], speed: [2, 5.5], direction: 'up', gravity: 7, drag: 0.8, colors: STAR_FADE, palette: GEMS, shape: 'shard', spin: 12, bounce: 0.6, heat: 0.6 },
+			{ amount: 30, life: [1, 1.8], size: [0.12, 0.26], speed: [0.2, 0.8], direction: 'up', gravity: -0.4, drag: 0.6, colors: STAR_FADE, palette: GEMS, flicker: 1, shape: 'star', spin: 1.5, spawn: 'shell', spread: 1.2, delay: [0.1, 0.5] }
+		],
+		auraSeconds: 3
+	},
+	// Moonlight: crescents and silver dust in a slow orbit.
+	moonlight: {
+		trail: [
+			{ amount: 46, life: [0.6, 1.2], size: [0.04, 0.1], speed: [0.1, 0.5], direction: 'sphere', gravity: -0.2, drag: 1.2, turbulence: 3, colors: MOON, flicker: 0.7 },
+			{ amount: 6, life: [0.8, 1.4], size: [0.14, 0.24], speed: [0.1, 0.4], direction: 'up', gravity: -0.3, drag: 1.2, colors: MOON, shape: 'moon', orient: 'upright' }
+		],
+		ground: { amount: 9, life: [1.4, 2.4], size: [0.2, 0.36], speed: [0, 0.04], direction: 'out', drag: 2, colors: ['#c8d2ff44', '#8ea0ff22', '#5a6cff00'], grow: 1.5 },
+		impact: wave(['#ffffff', '#c8d2ff88', '#8ea0ff00'], 0.4, 2.8),
+		collision: { amount: 10, life: [0.4, 0.8], size: [0.08, 0.16], speed: [1, 2.6], direction: 'sphere', drag: 1.6, colors: MOON, flicker: 0.6, shape: 'star', spin: 1.5 },
+		settle: [wave(['#ffffff', '#c8d2ff88', '#8ea0ff00'], 0.5, 2.8), { amount: 5, life: [1, 1.6], size: [0.16, 0.26], speed: [0.3, 0.8], direction: 'up', gravity: -0.6, drag: 1, colors: MOON, shape: 'moon', orient: 'upright' }],
+		aura: { amount: 16, life: [1.2, 2], size: [0.04, 0.1], speed: [0.9, 1.4], direction: 'out', drag: 0.1, attract: 5, swirl: 2, colors: MOON, flicker: 0.8, spawn: 'ring' },
+		explode: { amount: 40, life: [0.7, 1.3], size: [0.1, 0.22], speed: [2, 4.5], direction: 'sphere', drag: 1.6, colors: MOON, flicker: 0.5, shape: 'star', spin: 1.5 },
+		critical: [
+			wave(['#ffffff', '#e8ecffaa', '#8ea0ff00'], 0.8, 4),
+			{ amount: 12, life: [1.4, 2.2], size: [0.2, 0.36], speed: [0.6, 1.6], direction: 'up', gravity: -0.6, drag: 1, colors: MOON, shape: 'moon', orient: 'upright' },
+			{ amount: 70, life: [1.2, 2], size: [0.04, 0.11], speed: [1.6, 2.6], direction: 'out', drag: 0.1, attract: 6, swirl: 3, colors: MOON, flicker: 0.8, spawn: 'ring', spread: 1.4 }
+		],
+		auraSeconds: 4
 	}
 })

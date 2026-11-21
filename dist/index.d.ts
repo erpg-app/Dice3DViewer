@@ -46,9 +46,63 @@ export declare const createSystemDisplayRequest: (input: SystemDisplayRequestInp
 
 export declare const DEFAULT_TIMELINE_OPTIONS: NormalizedTimelineOptions;
 
+export declare const DICE_GLOW_MODES: readonly DiceGlowMode[];
+
 export declare const DICE_LOOK_FORMAT = "dice3dview-look";
 
 export declare const DICE_LOOK_VERSION = 1;
+
+export declare const DICE_SETTLE_MOTIONS: readonly DiceSettleMotion[];
+
+/**
+ * Mask of the finish: a greyscale image that says where the surface shines.
+ * Its white areas keep the finish and its black areas lose it, by the amount
+ * set for each property; the white areas may also give off light (glowing
+ * cracks, lit runes). Without a `texture` the brightness of the skin image
+ * is the mask.
+ */
+export declare interface DiceFinishMask {
+    /** Greyscale image URL; the skin image when omitted. */
+    readonly texture?: string;
+    /** Repetitions of the mask image across one die. Default `1`. */
+    readonly scale?: number;
+    /** Swaps white and black. Default `false`. */
+    readonly invert?: boolean;
+    /** How much the black areas lose their highlights, 0..1. Default `0`. */
+    readonly gloss?: number;
+    /** How much the black areas lose the metal, 0..1. Default `0`. */
+    readonly metal?: number;
+    /** How much the black areas lose the iridescence, 0..1. Default `0`. */
+    readonly iridescence?: number;
+    /** Light given off by the white areas, 0..3. Default `0`. */
+    readonly glow?: number;
+    /** Color of that light (`#rrggbb`); the die color when omitted. */
+    readonly glowColor?: string;
+}
+
+/**
+ * Finish of the dice body, over the color and the skin: how it shines and
+ * the color of its numbers. Every part is optional; without a finish the
+ * theme surface is kept.
+ */
+export declare interface DiceFinishOptions {
+    /** Shine, from `0` (matte, no highlights) to `1` (tight mirror-like highlights). Default: the theme's. */
+    readonly gloss?: number;
+    /** Polished metal, 0..1: highlights take the body color and reflect the sky. Default `0`. */
+    readonly metal?: number;
+    /** Pearly hue that shifts with the viewing angle and slowly over time, 0..1. Default `0`. */
+    readonly iridescence?: number;
+    /** Colored light along the silhouette (`#rrggbb`). */
+    readonly rim?: string;
+    /** Strength of the rim light, 0..2. Default `1`. */
+    readonly rimStrength?: number;
+    /** Color of numbers and symbols (`#rrggbb`) instead of the automatic light or dark. */
+    readonly labelColor?: string;
+    /** Where the finish applies and where the surface lights up. */
+    readonly mask?: DiceFinishMask;
+}
+
+export declare type DiceGlowMode = 'steady' | 'pulse' | 'flicker' | 'heartbeat' | 'rainbow';
 
 /** The dice emit their own light: a self-lit surface, a halo and a pool of light on the table. */
 export declare interface DiceGlowOptions {
@@ -58,12 +112,20 @@ export declare interface DiceGlowOptions {
     readonly intensity?: number;
     /** Pool of light cast on the table around each die. Default `true`. */
     readonly light?: boolean;
-    /** Slow breathing of the light. Default `false`. */
+    /** Slow breathing of the light. Default `false`. Same as `mode: 'pulse'`. */
     readonly pulse?: boolean;
+    /**
+     * How the light moves: `steady`, `pulse` (slow breathing), `flicker`
+     * (candle), `heartbeat` (two quick beats) or `rainbow` (the color travels
+     * through every hue). Default `steady`.
+     */
+    readonly mode?: DiceGlowMode;
+    /** Speed of the light's motion, 0.2..4. Default `1`. */
+    readonly speed?: number;
 }
 
 /**
- * A complete dice look: color, skin, particle effect and glow. The workshop of
+ * A complete dice look: color, skin, finish, particle effect, glow and motion. The workshop of
  * the test page exports it as a JSON file, ready to be stored and applied later.
  */
 export declare interface DiceLook {
@@ -75,6 +137,8 @@ export declare interface DiceLook {
     readonly skin?: DiceSkinOptions | null;
     readonly particles?: DiceParticleOptions | null;
     readonly glow?: DiceGlowOptions | null;
+    readonly finish?: DiceFinishOptions | null;
+    readonly motion?: DiceMotionOptions | null;
 }
 
 /** Viewer options a look sets. Parts the look leaves out are turned off. */
@@ -83,6 +147,8 @@ export declare interface DiceLookOptions {
     readonly skin: DiceSkinOptions | null;
     readonly particles: DiceParticleOptions | null;
     readonly glow: DiceGlowOptions | null;
+    readonly finish: DiceFinishOptions | null;
+    readonly motion: DiceMotionOptions | null;
 }
 
 /**
@@ -91,6 +157,12 @@ export declare interface DiceLookOptions {
  * Invalid files throw with the offending field.
  */
 export declare const diceLookOptions: (look: unknown) => DiceLookOptions;
+
+/** Extra motion of the dice (purely visual; the physics and the result are untouched). */
+export declare interface DiceMotionOptions {
+    /** Played by each die as it rests. Default `none`. */
+    readonly settle?: DiceSettleMotion;
+}
 
 export declare interface DiceParticleOptions {
     /** Built-in effect. Ignored when `effect` is given. */
@@ -109,7 +181,7 @@ export declare interface DiceParticleOptions {
     readonly moments?: Readonly<Partial<Record<ParticleMoment, boolean>>>;
 }
 
-export declare type DiceParticlePreset = 'sparkle' | 'fire' | 'arcane' | 'frost' | 'dust' | 'confetti' | 'electric' | 'smoke' | 'lava' | 'storm' | 'holy' | 'shadow' | 'poison' | 'nature' | 'cosmic' | 'lightning' | 'blizzard' | 'hearts';
+export declare type DiceParticlePreset = 'sparkle' | 'fire' | 'arcane' | 'frost' | 'dust' | 'confetti' | 'electric' | 'smoke' | 'lava' | 'storm' | 'holy' | 'shadow' | 'poison' | 'nature' | 'cosmic' | 'lightning' | 'blizzard' | 'hearts' | 'sakura' | 'bubbles' | 'vortex' | 'meteor' | 'crystal' | 'moonlight';
 
 declare class DiceResultViewer {
     #private;
@@ -139,10 +211,27 @@ declare class DiceResultViewer {
 export { DiceResultViewer }
 export default DiceResultViewer;
 
+/** Flourish of a die the moment it comes to rest: `pop` swells and settles, `twirl` turns once on its face. */
+export declare type DiceSettleMotion = 'none' | 'pop' | 'twirl';
+
 export declare type DiceSides = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 12 | 14 | 16 | 20 | 24 | 30 | 100;
 
 /** How the skin image combines with the die color underneath (image editor layer modes). */
 export declare type DiceSkinBlend = 'normal' | 'multiply' | 'screen' | 'overlay';
+
+/** One more image layered over the skin (same wrapping as the skin itself). */
+export declare interface DiceSkinLayer {
+    /** Image URL; `data:` and `blob:` URLs are accepted. */
+    readonly texture: string;
+    /** Repetitions of the image across one die. Default `1`. */
+    readonly scale?: number;
+    /** Blend over what is below. Default `normal`. */
+    readonly blend?: DiceSkinBlend;
+    /** Opacity of the layer, 0..1. Default `1`. */
+    readonly opacity?: number;
+    /** Repetitions per second along each axis. Default `[0, 0]`. */
+    readonly scroll?: readonly [number, number];
+}
 
 /**
  * Custom surface for the dice body, layered like an image editor: the die
@@ -164,6 +253,16 @@ export declare interface DiceSkinOptions {
     readonly opacity?: number;
     /** Color of numbers and symbols; `auto` picks by the image brightness. Default `auto`. */
     readonly labels?: 'auto' | 'light' | 'dark';
+    /**
+     * The image flows over the die: repetitions per second along each axis
+     * (lava, energy, drifting stars). Default `[0, 0]` (still).
+     */
+    readonly scroll?: readonly [number, number];
+    /**
+     * Second image over the first, with its own blend: veins, scratches,
+     * runes, glitter. It may flow on its own while the first stays still.
+     */
+    readonly detail?: DiceSkinLayer;
 }
 
 export declare type DiceTimelineEvent = RollTimelineEvent | RerollTimelineEvent | ExplodeTimelineEvent | TransformTimelineEvent | IncludeTimelineEvent | ExcludeTimelineEvent | ClassifyTimelineEvent;
@@ -354,6 +453,9 @@ declare interface NormalizedTimelineRerollEffectOptions extends NormalizedTimeli
     readonly hopHeight: number;
 }
 
+/** Emitters one moment may stack. */
+export declare const PARTICLE_LAYER_LIMIT = 4;
+
 export declare const PARTICLE_MOMENTS: readonly ParticleMoment[];
 
 export declare const PARTICLE_ORIENTATIONS: readonly ParticleOrientation[];
@@ -362,6 +464,8 @@ export declare const PARTICLE_ORIENTATIONS: readonly ParticleOrientation[];
 export declare const PARTICLE_PRESET_NAMES: readonly DiceParticlePreset[];
 
 export declare const PARTICLE_SHAPES: readonly ParticleShape[];
+
+export declare const PARTICLE_SPAWNS: readonly ParticleSpawn[];
 
 export declare type ParticleBlend = 'add' | 'alpha';
 
@@ -387,24 +491,24 @@ export declare interface ParticleCondition {
     readonly cooldown?: number;
 }
 
-/** A particle effect: each emitter reacts to one moment of the roll. */
+/** A particle effect: each emitter (or stack of layered emitters) reacts to one moment of the roll. */
 export declare interface ParticleEffectDefinition {
     /** While a die travels. */
-    readonly trail?: ParticleEmitterOptions;
+    readonly trail?: ParticleEmitterLayers;
     /** Marks left on the table along the path while a die rolls; `amount` is per unit of distance. */
-    readonly ground?: ParticleEmitterOptions;
+    readonly ground?: ParticleEmitterLayers;
     /** A die landing hard on the table. */
-    readonly impact?: ParticleEmitterOptions;
+    readonly impact?: ParticleEmitterLayers;
     /** Two dice hitting each other (the burst appears between them). */
-    readonly collision?: ParticleEmitterOptions;
+    readonly collision?: ParticleEmitterLayers;
     /** When a die comes to rest. */
-    readonly settle?: ParticleEmitterOptions;
+    readonly settle?: ParticleEmitterLayers;
     /** Around resting dice, fading out over `auraSeconds`. */
-    readonly aura?: ParticleEmitterOptions;
+    readonly aura?: ParticleEmitterLayers;
     /** An explosion child bursting from its parent. */
-    readonly explode?: ParticleEmitterOptions;
+    readonly explode?: ParticleEmitterLayers;
     /** Critical success or failure. */
-    readonly critical?: ParticleEmitterOptions;
+    readonly critical?: ParticleEmitterLayers;
     /** How long the aura lasts after a die rests. Default `2.5`. */
     readonly auraSeconds?: number;
     /**
@@ -414,12 +518,15 @@ export declare interface ParticleEffectDefinition {
      * the gap times `size` (`[1.1, 1.1]` reaches both dice). Suits `bolt` and
      * `arc` with a short life.
      */
-    readonly link?: ParticleEmitterOptions;
+    readonly link?: ParticleEmitterLayers;
     /** Largest gap (world units, a die is about 1.2 across) a link crosses. Default `5`. */
     readonly linkDistance?: number;
     /** Seconds links keep going after the dice rest. Default `2`. */
     readonly linkSeconds?: number;
 }
+
+/** One emitter, or up to four layered ones (e.g. a flash, then debris, then smoke). */
+export declare type ParticleEmitterLayers = ParticleEmitterOptions | readonly ParticleEmitterOptions[];
 
 /** One particle emitter. Ranges are `[min, max]`, distances in world units, times in seconds. */
 export declare interface ParticleEmitterOptions {
@@ -462,7 +569,33 @@ export declare interface ParticleEmitterOptions {
     readonly palette?: readonly string[];
     /** Conditions for playing (force, speed, faces, sides, chance, cooldown). Default: always. */
     readonly when?: ParticleCondition;
+    /** Random wander: an acceleration that keeps changing direction (curling smoke, fireflies). Default `0`. */
+    readonly turbulence?: number;
+    /**
+     * Pull toward the point where the particle was born (negative pushes it
+     * away). With `swirl` the particles orbit the die. Default `0`.
+     */
+    readonly attract?: number;
+    /** Stretches the sprite along its motion, per unit of speed (0..2): streaks, rain, warp lines. Default `0`. */
+    readonly stretch?: number;
+    /** Seconds each particle waits before it appears, `[min, max]`: staggers a burst or layers one after another. */
+    readonly delay?: readonly [number, number];
+    /**
+     * Where particles are born: `volume` anywhere around the point, `ring` on a
+     * circle around the die (level with it), `shell` on a sphere around it.
+     * Default `volume`.
+     */
+    readonly spawn?: ParticleSpawn;
+    /** Multiplies the size of the spawn area (0..8). Default `1`. */
+    readonly spread?: number;
+    /** Share of the falling speed a particle keeps when it hits the table, 0..1. Default `0.25`. */
+    readonly bounce?: number;
+    /** White-hot center, 0..1 (glowing particles only): embers, plasma, sparks. Default `0`. */
+    readonly heat?: number;
 }
+
+/** The emitters of a moment as a list: none, the single one, or its layers. */
+export declare const particleLayers: (effect: ParticleEffectDefinition | null | undefined, moment: ParticleMoment) => readonly ParticleEmitterOptions[];
 
 /** Moments of a roll an effect can react to. */
 export declare type ParticleMoment = 'trail' | 'ground' | 'impact' | 'collision' | 'settle' | 'aura' | 'explode' | 'critical' | 'link';
@@ -479,10 +612,14 @@ export declare type ParticleOrientation = 'random' | 'upright' | 'motion';
  * `star` four-point twinkle, `ring` hollow circle, `confetti` spinning
  * paper, `smoke` soft irregular puff, `bolt` jagged lightning along the
  * motion, `arc` crackling electric filaments, `flame` tongue of fire,
- * `snowflake` six-armed crystal, `heart`, `diamond` faceted gem, `triangle`
- * and `cross`. Bolts and arcs redraw their zigzag several times per second.
+ * `snowflake` six-armed crystal, `heart`, `diamond` faceted gem, `triangle`,
+ * `cross`, `bubble` (thin rim with a highlight), `petal`, `shard` (splinter
+ * of glass), `moon` crescent, `comet` (bright head with a fading tail) and
+ * `drop`. Bolts and arcs redraw their zigzag several times per second.
  */
-export declare type ParticleShape = 'soft' | 'spark' | 'star' | 'ring' | 'confetti' | 'smoke' | 'bolt' | 'arc' | 'flame' | 'snowflake' | 'heart' | 'diamond' | 'triangle' | 'cross';
+export declare type ParticleShape = 'soft' | 'spark' | 'star' | 'ring' | 'confetti' | 'smoke' | 'bolt' | 'arc' | 'flame' | 'snowflake' | 'heart' | 'diamond' | 'triangle' | 'cross' | 'bubble' | 'petal' | 'shard' | 'moon' | 'comet' | 'drop';
+
+export declare type ParticleSpawn = 'volume' | 'ring' | 'shell';
 
 export declare interface RerollTimelineEvent extends DiceTimelineEventBase {
     readonly type: 'reroll';
@@ -822,6 +959,10 @@ export declare interface ViewerOptions {
     readonly particles?: DiceParticleOptions | null;
     /** Light emitted by the dice (`null` = none). */
     readonly glow?: DiceGlowOptions | null;
+    /** Finish of the dice body: shine, metal, iridescence, rim light, label color (`null` = theme surface). */
+    readonly finish?: DiceFinishOptions | null;
+    /** Extra motion of the dice (`null` = none). */
+    readonly motion?: DiceMotionOptions | null;
     /**
      * Reduced motion: the dice appear at rest with a short fade, without the
      * throw, trembles, rings, particles or pulsing light. `auto` follows the

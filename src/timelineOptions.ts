@@ -6,7 +6,7 @@ import type {
 	ViewerOptions
 } from './types'
 import { normalizeDisplayMode } from './displayRequest'
-import { validateGlowOptions, validateParticleOptions, validateSkinOptions } from './particleOptions'
+import { validateFinishOptions, validateGlowOptions, validateMotionOptions, validateParticleOptions, validateSkinOptions } from './particleOptions'
 
 export const noop = (): void => undefined
 
@@ -181,6 +181,8 @@ export const createViewerOptions = (options: ViewerOptions): RequiredViewerOptio
 	skin: options.skin ?? null,
 	particles: options.particles ?? null,
 	glow: options.glow ?? null,
+	finish: options.finish ?? null,
+	motion: options.motion ?? null,
 	reducedMotion: options.reducedMotion ?? 'auto',
 	onCollision: options.onCollision ?? noop,
 	onThemeConfigLoaded: options.onThemeConfigLoaded ?? noop,
@@ -284,6 +286,8 @@ export const validateViewerOptions = (options: RequiredViewerOptions): void => {
 	validateSkinOptions(options.skin)
 	validateParticleOptions(options.particles)
 	validateGlowOptions(options.glow)
+	validateFinishOptions(options.finish)
+	validateMotionOptions(options.motion)
 	if(!['auto', 'always', 'never'].includes(options.reducedMotion)) throw new Error('Viewer option reducedMotion must be auto, always or never.')
 	validateTimelineOptions(options.timeline)
 }

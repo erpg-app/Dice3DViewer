@@ -10,11 +10,11 @@ const dist = path.join(root, 'dist')
 const BUDGETS = Object.freeze({
 	libraryGzip: 15 * 1024,
 	/** Shared by the worker and the main-thread fallback. */
-	rendererGzip: 36 * 1024,
-	/** Optional particle engine (shaders of 14 shapes and the image atlas), fetched only when `particles` is used. */
-	particlesGzip: 8 * 1024,
+	rendererGzip: 38 * 1024,
+	/** Optional particle engine (shaders of 20 shapes and the image atlas), fetched only when `particles` is used. */
+	particlesGzip: 10 * 1024,
 	/** Built-in particle presets, fetched only when a preset name is used. */
-	presetsGzip: 5 * 1024,
+	presetsGzip: 8 * 1024,
 	/** Procedural dice (d3, d5, d7, d14, d16, d24, d30), fetched only when one of them is rolled. */
 	irregularGzip: 4 * 1024,
 	adaptersGzip: 3 * 1024

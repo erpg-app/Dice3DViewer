@@ -5,7 +5,10 @@ import {
 	PARTICLE_PRESET_NAMES,
 	PARTICLE_SHAPES,
 	parseParticleColor,
+	particleLayers,
+	validateFinishOptions,
 	validateGlowOptions,
+	validateMotionOptions,
 	validateParticleOptions,
 	validateSkinOptions
 } from './particleOptions'
@@ -42,15 +45,16 @@ describe('dice skins and particle options', () => {
 		assert.equal(customizeEffect(custom, { preset: 'fire' } as never), custom, 'no quick control: the definition itself')
 	})
 
-	it('ships eighteen distinct presets, each reacting to every moment of a roll', async () => {
-		assert.equal(PARTICLE_PRESET_NAMES.length, 18)
+	it('ships twenty-four distinct presets, each reacting to every moment of a roll', async () => {
+		assert.equal(PARTICLE_PRESET_NAMES.length, 24)
 		for(const name of PARTICLE_PRESET_NAMES) {
 			const preset = PARTICLE_PRESETS[name]
 			// Links between dice are an extra of a few presets.
 			assert.deepEqual(PARTICLE_MOMENTS.filter(moment => moment !== 'link' && !preset[moment]), [], `${name} defines every moment`)
 		}
 		const signatures = new Set(PARTICLE_PRESET_NAMES.map(name => JSON.stringify(PARTICLE_PRESETS[name])))
-		assert.equal(signatures.size, 18, 'no two presets are the same')
+		assert.equal(signatures.size, 24, 'no two presets are the same')
+		for(const name of PARTICLE_PRESET_NAMES) assert.doesNotThrow(() => validateParticleOptions({ effect: PARTICLE_PRESETS[name] }), `${name} is a valid effect`)
 		assert.equal(await loadParticlePresets(), PARTICLE_PRESETS, 'the lazy loader serves the same definitions')
 	})
 
@@ -430,7 +434,7 @@ describe('dice looks (workshop files)', () => {
 
 	it('turns off the parts a look leaves out', () => {
 		const options = diceLookOptions({ format: DICE_LOOK_FORMAT, version: 1 })
-		assert.deepEqual(options, { skin: null, particles: null, glow: null })
+		assert.deepEqual(options, { skin: null, particles: null, glow: null, finish: null, motion: null })
 	})
 
 	it('rejects foreign or broken files with the offending field', () => {
@@ -476,15 +480,123 @@ describe('particle customization', () => {
 
 	it('recolors ramps and palettes in the chosen hue, keeping brightness order and alpha', () => {
 		const custom = customizeEffect(base, { color: '#3366ff' })
-		const stops = custom.trail!.colors.map(color => parseParticleColor(color)!)
+		const stops = particleLayers(custom, 'trail')[0]!.colors.map(color => parseParticleColor(color)!)
 		const luma = (c: readonly number[]): number => 0.299 * c[0]! + 0.587 * c[1]! + 0.114 * c[2]!
 		assert.ok(luma(stops[0]!) > luma(stops[1]!) && luma(stops[1]!) > luma(stops[2]!), 'the ramp still fades from bright to dark')
 		for(const stop of stops.slice(1)) assert.ok(stop[2] > stop[0] && stop[2] > stop[1], 'stops take the blue hue')
 		assert.ok(Math.abs(stops[2]![3] - 0x80 / 255) < 1e-9, 'alpha is kept')
-		for(const color of custom.impact!.palette!) {
+		for(const color of particleLayers(custom, 'impact')[0]!.palette!) {
 			const [r, g, b] = parseParticleColor(color)!
 			assert.ok(b >= r && b >= g, 'palette colors take the hue too')
 		}
-		assert.notEqual(customizeEffect(PARTICLE_PRESETS.fire, { color: '#3366ff' }).trail?.colors[0], PARTICLE_PRESETS.fire.trail?.colors[0])
+		const fire = particleLayers(PARTICLE_PRESETS.fire, 'trail')
+		const blueFire = particleLayers(customizeEffect(PARTICLE_PRESETS.fire, { color: '#3366ff' }), 'trail')
+		assert.equal(blueFire.length, fire.length, 'every layer of a moment is kept')
+		blueFire.forEach((layer, index) => assert.notEqual(layer.colors[0], fire[index]!.colors[0]))
+	})
+})
+
+describe('layered emitters and motion of the particles', () => {
+	it('plays every layer of a moment and keeps a single emitter as it was', () => {
+		const system = new ParticleSystem()
+		system.configure({
+			impact: [emitter({ amount: 4, shape: 'ring' }), emitter({ amount: 6, shape: 'shard' })],
+			settle: emitter({ amount: 3 })
+		}, 1, 'layers')
+		system.burst('impact', [0, 1, 0], 0.5)
+		assert.equal(system.count, 10)
+		system.update(0.1)
+		const batches = system.build()
+		const shapes = Array.from({ length: batches.additiveCount }, (_, i) => batches.additive[i * PARTICLE_STRIDE + 8]!)
+		assert.equal(shapes.filter(shape => shape === SHAPES.ring).length, 4)
+		assert.equal(shapes.filter(shape => shape === SHAPES.shard).length, 6)
+		system.burst('settle', [0, 1, 0], 0.5)
+		assert.equal(system.count, 13)
+	})
+
+	it('streams each layer of a continuous moment at its own rate', () => {
+		const system = new ParticleSystem()
+		system.configure({ aura: [emitter({ amount: 30, life: [9, 9] }), emitter({ amount: 12, life: [9, 9], shape: 'star' })] }, 1, 'rates')
+		const die = {}
+		for(let frame = 0; frame < 60; frame++) system.aura(die, [0, 1, 0], 1 / 60, 0.6, 1)
+		assert.ok(Math.abs(system.count - 42) <= 2, String(system.count))
+	})
+
+	it('holds delayed particles back until their time', () => {
+		const system = new ParticleSystem()
+		system.configure({ explode: emitter({ amount: 8, life: [1, 1], delay: [0.3, 0.3] }) }, 1, 'delay')
+		system.burst('explode', [0, 1, 0], 0.5)
+		assert.equal(system.count, 8)
+		assert.equal(system.build().additiveCount, 0, 'nothing is drawn while they wait')
+		system.update(0.2)
+		assert.equal(system.build().additiveCount, 0)
+		system.update(0.2)
+		assert.equal(system.build().additiveCount, 8)
+		system.update(1)
+		assert.equal(system.count, 0, 'the delay does not shorten or stretch their life')
+	})
+
+	it('spawns rings around the die and pulls particles back with attract', () => {
+		const system = new ParticleSystem()
+		system.configure({ settle: emitter({ amount: 40, life: [5, 5], speed: [0, 0], spawn: 'ring' }) }, 1, 'ring')
+		system.burst('settle', [2, 1, -3], 0.5)
+		let batches = system.build()
+		for(let i = 0; i < batches.additiveCount; i++) {
+			const o = i * PARTICLE_STRIDE
+			const distance = Math.hypot(batches.additive[o]! - 2, batches.additive[o + 2]! + 3)
+			assert.ok(Math.abs(distance - 0.25 * 2.6) < 1e-4, `on the circle (${distance})`)
+			assert.ok(Math.abs(batches.additive[o + 1]! - 1) < 1e-6, 'level with the die')
+		}
+		system.configure({ settle: emitter({ amount: 40, life: [5, 5], speed: [0, 0], spawn: 'ring', attract: 6 }) }, 1, 'pull')
+		system.clear()
+		system.burst('settle', [2, 1, -3], 0.5)
+		for(let frame = 0; frame < 12; frame++) system.update(1 / 60)
+		batches = system.build()
+		for(let i = 0; i < batches.additiveCount; i++) {
+			const o = i * PARTICLE_STRIDE
+			assert.ok(Math.hypot(batches.additive[o]! - 2, batches.additive[o + 2]! + 3) < 0.25 * 2.6, 'moving toward the die')
+		}
+	})
+
+	it('writes the stretch along the motion and the heat of each particle', () => {
+		const system = new ParticleSystem()
+		system.configure({ impact: emitter({ amount: 5, direction: 'out', speed: [4, 4], stretch: 0.5, heat: 0.8 }) }, 1, 'stretch')
+		system.burst('impact', [0, 1, 0], 0)
+		system.update(1 / 60)
+		const batches = system.build()
+		for(let i = 0; i < batches.additiveCount; i++) {
+			const o = i * PARTICLE_STRIDE
+			assert.ok(batches.additive[o + 10]! > 2.5 && batches.additive[o + 10]! <= 3.01, String(batches.additive[o + 10]))
+			assert.ok(Math.abs(batches.additive[o + 11]! - 0.8) < 1e-6)
+		}
+	})
+
+	it('validates layers, the new emitter fields, finishes and motions with the offending path', () => {
+		assert.doesNotThrow(() => validateParticleOptions({ effect: { trail: [emitter(), emitter({ turbulence: 4, attract: -3, stretch: 1, delay: [0, 0.5], spawn: 'shell', spread: 2, bounce: 0.6, heat: 1, shape: 'comet' })] } }))
+		assert.throws(() => validateParticleOptions({ effect: { trail: [] } }), /particles\.effect\.trail must stack 1 to 4/)
+		assert.throws(() => validateParticleOptions({ effect: { trail: [emitter(), emitter(), emitter(), emitter(), emitter()] } }), /stack 1 to 4/)
+		assert.throws(() => validateParticleOptions({ effect: { impact: [emitter(), emitter({ heat: 2 })] } }), /particles\.effect\.impact\[1\]\.heat/)
+		assert.throws(() => validateParticleOptions({ effect: { impact: emitter({ spawn: 'cube' as 'ring' }) } }), /impact\.spawn/)
+		assert.throws(() => validateParticleOptions({ effect: { impact: emitter({ delay: [1, 0.5] }) } }), /impact\.delay/)
+		assert.doesNotThrow(() => validateFinishOptions({ gloss: 0.9, metal: 1, iridescence: 0.5, rim: '#ff00aa', rimStrength: 1.5, labelColor: '#ffd166' }))
+		assert.throws(() => validateFinishOptions({ gloss: 2 }), /finish\.gloss/)
+		assert.throws(() => validateFinishOptions({ labelColor: 'gold' }), /finish\.labelColor/)
+		assert.doesNotThrow(() => validateMotionOptions({ settle: 'twirl' }))
+		assert.throws(() => validateMotionOptions({ settle: 'jump' as 'pop' }), /motion\.settle/)
+		assert.doesNotThrow(() => validateGlowOptions({ mode: 'rainbow', speed: 2 }))
+		assert.throws(() => validateGlowOptions({ mode: 'strobe' as 'pulse' }), /glow\.mode/)
+		assert.doesNotThrow(() => validateSkinOptions({ texture: 'lava.png', scroll: [0.2, -0.1] }))
+		assert.throws(() => validateSkinOptions({ texture: 'lava.png', scroll: [9, 0] }), /skin\.scroll/)
+		assert.doesNotThrow(() => validateSkinOptions({ texture: 'stone.png', detail: { texture: 'veins.png', blend: 'screen', opacity: 0.6, scale: 2, scroll: [0.1, 0] } }))
+		assert.throws(() => validateSkinOptions({ texture: 'stone.png', detail: { texture: '' } }), /skin\.detail\.texture/)
+		assert.throws(() => validateSkinOptions({ texture: 'stone.png', detail: { texture: 'v.png', blend: 'add' as 'screen' } }), /skin\.detail\.blend/)
+		assert.doesNotThrow(() => validateFinishOptions({ gloss: 1, mask: { texture: 'runes.png', scale: 2, invert: true, gloss: 1, metal: 0.5, iridescence: 1, glow: 1.5, glowColor: '#ff5a1a' } }))
+		assert.doesNotThrow(() => validateFinishOptions({ mask: { gloss: 1 } }))
+		assert.throws(() => validateFinishOptions({ mask: { glow: 9 } }), /finish\.mask\.glow/)
+		assert.throws(() => validateFinishOptions({ mask: { glowColor: 'red' } }), /finish\.mask\.glowColor/)
+		const options = diceLookOptions({ format: DICE_LOOK_FORMAT, version: 1, finish: { metal: 1 }, motion: { settle: 'pop' } })
+		assert.deepEqual(options.finish, { metal: 1 })
+		assert.deepEqual(options.motion, { settle: 'pop' })
+		assert.doesNotThrow(() => validateViewerOptions(createViewerOptions(options)))
 	})
 })

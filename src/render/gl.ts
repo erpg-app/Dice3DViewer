@@ -43,6 +43,21 @@ export interface SurfaceMaterial {
 	/** 0 normal, 1 multiply, 2 screen, 3 overlay. */
 	readonly skinBlend?: number
 	readonly skinOpacity?: number
+	/** Second image over the skin: scale, blend (as `skinBlend`), opacity and flow. */
+	readonly detail?: GLTexture | undefined
+	readonly detailScale?: number
+	readonly detailBlend?: number
+	readonly detailOpacity?: number
+	readonly detailScroll?: readonly [number, number]
+	/** Finish mask image (`maskMode` 1), or the skin image as the mask (2); 0 = none. */
+	readonly mask?: GLTexture | undefined
+	readonly maskMode?: number
+	readonly maskScale?: number
+	readonly maskInvert?: boolean
+	/** How much the dark areas of the mask lose gloss, metal and iridescence. */
+	readonly maskAmounts?: ReadonlyVec3
+	/** Light of the bright areas of the mask (color × strength). */
+	readonly maskGlow?: ReadonlyVec3
 	/** Contrasting outline drawn around the atlas labels (used with skins). */
 	readonly outline?: ReadonlyVec3 | undefined
 }
@@ -58,6 +73,22 @@ export interface DrawState {
 	readonly saturation: number
 	/** Light the die emits (color × strength): the body looks lit from inside. */
 	readonly emission?: ReadonlyVec3
+}
+
+/** Finish shared by every die of a frame (viewer `finish` and the skin flow). */
+export interface SurfaceFinish {
+	/** Seconds, for the skin flow and the iridescence drift. */
+	readonly time: number
+	/** 0..1, or negative for the theme's own shine. */
+	readonly gloss: number
+	readonly metal: number
+	readonly iridescence: number
+	/** Rim light (color × strength). */
+	readonly rim: ReadonlyVec3
+	/** Color of the labels of `color` themes (null = light or dark by the body). */
+	readonly label: ReadonlyVec3 | null
+	/** Skin repetitions per second along each axis. */
+	readonly scroll: readonly [number, number]
 }
 
 export interface FrameSetup {
@@ -131,17 +162,37 @@ uniform float uSkinOpacity;
 uniform vec3 uOutline;
 uniform float uHasOutline;
 uniform vec2 uDiffuseTexel;
+uniform float uTime;
+uniform vec2 uSkinScroll;
+uniform vec4 uFinish;
+uniform vec3 uRim;
+uniform vec3 uLabel;
+uniform sampler2D uDetail;
+uniform vec4 uDetailP;
+uniform vec2 uDetailScroll;
+uniform sampler2D uMask;
+uniform vec3 uMaskP;
+uniform vec3 uMaskAmt;
+uniform vec3 uMaskGlow;
 varying vec3 vObj;
 varying vec3 vObjNormal;
 // Custom skin: the image wraps the body by triplanar projection in object space,
 // so it follows the die instead of the face atlas layout.
-vec3 skinColor() {
+vec3 tri(sampler2D image, float scale, vec2 scroll) {
 	vec3 w = abs(normalize(vObjNormal));
 	w = w * w;
 	w = w * w;
 	w /= w.x + w.y + w.z;
-	vec3 p = vObj * uSkinScale;
-	return texture2D(uSkin, p.yz).rgb * w.x + texture2D(uSkin, p.zx).rgb * w.y + texture2D(uSkin, p.xy).rgb * w.z;
+	vec3 p = vObj * scale + uTime * scroll.xyx;
+	return texture2D(image, p.yz).rgb * w.x + texture2D(image, p.zx).rgb * w.y + texture2D(image, p.xy).rgb * w.z;
+}
+// An image layer over what is below: 0 normal, 1 multiply, 2 screen, 3 overlay.
+vec3 lay(vec3 base, vec3 image, float mode, float opacity) {
+	vec3 layered = image;
+	if(mode > 2.5) layered = mix(2.0 * base * image, 1.0 - 2.0 * (1.0 - base) * (1.0 - image), step(0.5, base));
+	else if(mode > 1.5) layered = 1.0 - (1.0 - base) * (1.0 - image);
+	else if(mode > 0.5) layered = base * image;
+	return mix(base, layered, opacity);
 }
 // Discarded dice lose saturation and a little light, so the kept ones stand out.
 vec3 grade(vec3 color) {
@@ -165,19 +216,29 @@ vec3 perturb(vec3 N, vec3 p, vec2 uv, vec3 m) {
 void main() {
 	vec3 N = normalize(vNormal);
 	vec3 body = uColor;
+	// Layers: the die color below, then each image with its blend mode and opacity.
+	vec3 skin = vec3(1.0);
 	if(uHasSkin > 0.5) {
-		// Layers: the die color below, the image above with a blend mode and an opacity.
-		vec3 skin = skinColor();
-		vec3 layered = skin;
-		if(uSkinBlend > 2.5) layered = mix(2.0 * body * skin, 1.0 - 2.0 * (1.0 - body) * (1.0 - skin), step(0.5, body));
-		else if(uSkinBlend > 1.5) layered = 1.0 - (1.0 - body) * (1.0 - skin);
-		else if(uSkinBlend > 0.5) layered = body * skin;
-		body = mix(body, layered, uSkinOpacity);
+		skin = tri(uSkin, uSkinScale, uSkinScroll);
+		body = lay(body, skin, uSkinBlend, uSkinOpacity);
+	}
+	if(uDetailP.x > 0.5) body = lay(body, tri(uDetail, uDetailP.y, uDetailScroll), uDetailP.z, uDetailP.w);
+	// Finish mask: white keeps the finish, black loses it; white may also light up.
+	float mask = 1.0;
+	if(uMaskP.x > 0.5) {
+		mask = dot(uMaskP.x > 1.5 ? skin : tri(uMask, uMaskP.y, vec2(0.0)), vec3(0.299, 0.587, 0.114));
+		if(uMaskP.z > 0.5) mask = 1.0 - mask;
 	}
 	vec3 albedo = body;
 	if(uHasDiffuse > 0.5) {
 		vec4 t = texture2D(uDiffuse, vUv);
 		vec3 rgb = (uInvertDiffuse > 0.5 ? 1.0 - t.rgb : t.rgb) * uDiffuseLevel;
+		vec3 outline = uOutline;
+		if(uFinish.w > 0.5 && uColorMask > 0.5) {
+			// Own label color: the outline takes the opposite brightness.
+			rgb = uLabel;
+			outline = vec3(step(dot(uLabel, vec3(0.299, 0.587, 0.114)), 0.5));
+		}
 		if(uColorMask > 0.5 && uHasOutline > 0.5) {
 			// Busy skins: a thin contrasting outline keeps numbers and symbols readable.
 			vec2 o = uDiffuseTexel * 2.5;
@@ -185,7 +246,7 @@ void main() {
 				max(texture2D(uDiffuse, vUv + vec2(o.x, o.y)).a, texture2D(uDiffuse, vUv - vec2(o.x, o.y)).a),
 				max(texture2D(uDiffuse, vUv + vec2(o.x, -o.y)).a, texture2D(uDiffuse, vUv - vec2(o.x, -o.y)).a)
 			);
-			body = mix(body, uOutline, edge * 0.85);
+			body = mix(body, outline, edge * 0.85);
 		}
 		albedo = uColorMask > 0.5 ? mix(body, rgb, t.a) : rgb * uColor;
 	}
@@ -204,13 +265,31 @@ void main() {
 	vec3 L = normalize(-uLightDir);
 	vec3 V = normalize(uEye - vPos);
 	float diffuse = uDirI * max(dot(N, L), 0.0) + uHemiI * (0.5 + 0.5 * N.y);
-	float spec = uDirI * pow(max(dot(N, normalize(L + V)), 0.0), 64.0)
-		+ uHemiI * pow(max(dot(N, normalize(vec3(0.0, 1.0, 0.0) + V)), 0.0), 64.0);
+	// Finish: gloss tightens and strengthens the highlights (negative = the theme's own).
+	float gloss = uFinish.x;
+	float power = gloss < 0.0 ? 64.0 : mix(6.0, 220.0, gloss * gloss);
+	float spec = (uDirI * pow(max(dot(N, normalize(L + V)), 0.0), power)
+		+ uHemiI * pow(max(dot(N, normalize(vec3(0.0, 1.0, 0.0) + V)), 0.0), power)) * mix(1.0, mask, uMaskAmt.x);
 	vec3 specular = uSpecular;
+	if(gloss >= 0.0) specular *= gloss * 3.2;
 	if(uHasSpecularMap > 0.5) specular *= texture2D(uSpecularMap, vUv).rgb;
-	vec3 color = clamp(vec3(diffuse) + uEmissive, 0.0, 1.0) * albedo + specular * spec;
+	// Metal: darker body, highlights in its own color and a banded reflection of the sky.
+	float metal = uFinish.y * mix(1.0, mask, uMaskAmt.y);
+	vec3 R = reflect(-V, N);
+	float sky = 0.5 + 0.5 * R.y;
+	vec3 color = clamp(vec3(diffuse) + uEmissive, 0.0, 1.0) * albedo * (1.0 - 0.3 * metal)
+		+ mix(specular, albedo * 2.2 + 0.15, metal) * spec
+		+ albedo * metal * (0.2 + 0.8 * sky * sky) * (0.42 + 0.16 * sin(dot(R, vec3(5.0, 0.0, 3.5))));
+	float ndv = max(dot(N, V), 0.0);
+	if(uFinish.z > 0.0) {
+		// Iridescence: a pearly hue per facet that shifts with the angle and drifts over time.
+		vec3 hue = 0.5 + 0.5 * cos(6.2832 * (ndv * 1.2 + dot(vObjNormal, vec3(0.35, 0.2, 0.3)) + uTime * 0.06 + vec3(0.0, 0.33, 0.67)));
+		color = mix(color, color * (0.55 + 0.9 * hue) + 0.12 * hue, uFinish.z * mix(1.0, mask, uMaskAmt.z));
+	}
+	color += uMaskGlow * mask * mask;
+	color += uRim * pow(1.0 - ndv, 1.5);
 	// Effect glow hugs the silhouette and keeps the face artwork legible.
-	float rim = pow(1.0 - max(dot(N, V), 0.0), 2.0);
+	float rim = pow(1.0 - ndv, 2.0);
 	color += uGlow * uGlowStrength * (0.12 + 0.5 * rim);
 	// Own light, screen-blended: dark bodies light up in the glow color, light
 	// bodies keep their detail instead of burning to white; the edges shine most.
@@ -271,8 +350,8 @@ void main() {
 	gl_FragColor = vec4(uColor * a, a * 0.35);
 }`
 
-/** Floats per particle: x, y, z, size, premultiplied r, g, b, a, shape, angle. */
-const PARTICLE_FLOATS = 10
+/** Floats per particle: x, y, z, size, premultiplied r, g, b, a, shape, angle, stretch, heat. */
+const PARTICLE_FLOATS = 12
 /** Texture unit of the particle image atlas (surfaces use the lower ones). */
 const ATLAS_UNIT = 7
 
@@ -330,6 +409,7 @@ export class DiceGL {
 	#haloFrame: FrameSetup | null = null
 	#surfaceMaterial: SurfaceMaterial | null = null
 	#surfaceWinding: number | undefined
+	#finish: SurfaceFinish = NO_FINISH
 	#opaqueSurface = false
 	#boundMesh: GLMesh | null = null
 	#boundProgram: Program | null = null
@@ -500,8 +580,9 @@ export class DiceGL {
 		for(const buffer of [mesh.position, mesh.normal, mesh.uv, mesh.index]) gl.deleteBuffer(buffer)
 	}
 
-	beginFrame(width: number, height: number): void {
+	beginFrame(width: number, height: number, finish: SurfaceFinish = NO_FINISH): void {
 		const gl = this.gl
+		this.#finish = finish
 		this.#surfaceWinding = undefined
 		gl.viewport(0, 0, width, height)
 		gl.clearColor(0, 0, 0, 0)
@@ -631,6 +712,13 @@ export class DiceGL {
 			gl.enable(gl.CULL_FACE)
 			gl.cullFace(gl.BACK)
 			this.#opaqueSurface = false
+			const finish = this.#finish
+			gl.uniform1f(u.uTime ?? null, finish.time % 3600)
+			gl.uniform2f(u.uSkinScroll ?? null, finish.scroll[0], finish.scroll[1])
+			gl.uniform4f(u.uFinish ?? null, finish.gloss, finish.metal, finish.iridescence, finish.label ? 1 : 0)
+			gl.uniform3f(u.uRim ?? null, finish.rim[0], finish.rim[1], finish.rim[2])
+			const label = finish.label ?? NO_EMISSION
+			gl.uniform3f(u.uLabel ?? null, label[0], label[1], label[2])
 		}
 		if(this.#surfaceWinding !== mesh.frontFace) {
 			gl.frontFace(mesh.frontFace)
@@ -662,6 +750,15 @@ export class DiceGL {
 			gl.uniform1f(u.uSkinScale ?? null, material.skinScale ?? 1)
 			gl.uniform1f(u.uSkinBlend ?? null, material.skinBlend ?? 0)
 			gl.uniform1f(u.uSkinOpacity ?? null, material.skinOpacity ?? 1)
+			this.#bindTexture(4, material.detail, u.uDetail, null)
+			gl.uniform4f(u.uDetailP ?? null, material.detail ? 1 : 0, material.detailScale ?? 1, material.detailBlend ?? 0, material.detailOpacity ?? 1)
+			const flow = material.detailScroll ?? NO_FLOW
+			gl.uniform2f(u.uDetailScroll ?? null, flow[0], flow[1])
+			this.#bindTexture(5, material.mask, u.uMask, null)
+			gl.uniform3f(u.uMaskP ?? null, material.maskMode ?? 0, material.maskScale ?? 1, material.maskInvert ? 1 : 0)
+			const amounts = material.maskAmounts ?? NO_EMISSION, lit = material.maskGlow ?? NO_EMISSION
+			gl.uniform3f(u.uMaskAmt ?? null, amounts[0], amounts[1], amounts[2])
+			gl.uniform3f(u.uMaskGlow ?? null, lit[0], lit[1], lit[2])
 			gl.uniform1f(u.uHasOutline ?? null, material.outline ? 1 : 0)
 			const outline = material.outline ?? NO_EMISSION
 			gl.uniform3f(u.uOutline ?? null, outline[0], outline[1], outline[2])
@@ -785,10 +882,12 @@ export class DiceGL {
 }
 
 const NO_EMISSION: ReadonlyVec3 = [0, 0, 0]
+const NO_FLOW: readonly [number, number] = [0, 0]
+const NO_FINISH: SurfaceFinish = { time: 0, gloss: -1, metal: 0, iridescence: 0, rim: NO_EMISSION, label: null, scroll: [0, 0] }
 /** Alpha share of each halo layer, inner to outer. */
 const HALO_SHARES = [0.55, 0.3, 0.15]
 /** Per-instance attributes of a particle: name, floats, byte offset. */
-const PARTICLE_LAYOUT: readonly (readonly [string, number, number])[] = [['aPos', 3, 0], ['aSize', 1, 12], ['aColor', 4, 16], ['aShape', 1, 32], ['aAngle', 1, 36]]
+const PARTICLE_LAYOUT: readonly (readonly [string, number, number])[] = [['aPos', 3, 0], ['aSize', 1, 12], ['aColor', 4, 16], ['aShape', 1, 32], ['aAngle', 1, 36], ['aExtra', 2, 40]]
 
 /** Positive when the outward faces (per vertex normals) wind counter-clockwise. */
 const windingOf = (positions: ArrayLike<number>, normals: ArrayLike<number>, indices: ArrayLike<number>): number => {

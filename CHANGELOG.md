@@ -6,6 +6,20 @@ Todas as mudanças relevantes deste projeto são registradas aqui. O formato seg
 
 ### Adicionado
 
+- visual das skins: cada momento das partículas aceita até 4 emissores em
+  camadas; emissores ganham `turbulence`, `attract`, `stretch`, `delay`,
+  `spawn` (volume, ring, shell), `spread`, `bounce` e `heat`; formas novas
+  `bubble`, `petal`, `shard`, `moon`, `comet` e `drop`; presets `sakura`,
+  `bubbles`, `vortex`, `meteor`, `crystal` e `moonlight`; raios e arcos com
+  núcleo branco fino de espessura constante na tela;
+- `finish` (polimento, metal, iridescência, luz de contorno, cor dos
+  números), `motion.settle` (`pop`, `twirl`), `glow.mode` (pulse, flicker,
+  heartbeat, rainbow) com `glow.speed` e `skin.scroll` (textura em
+  movimento), todos também no arquivo de look;
+- `skin.detail`: segunda imagem sobre a textura, com mistura, opacidade,
+  repetição e movimento próprios; `finish.mask`: máscara em tons de cinza
+  (imagem própria ou a própria textura) que tira polimento, metal e
+  iridescência das áreas escuras e acende as claras (`glow`, `glowColor`);
 - dados irregulares d3, d5, d7, d14, d16, d24 e d30 ("Zocchi dice"), gerados
   em código: forma, colisão e números não dependem do modelo do tema, então
   valem para qualquer tema, com `themeColor` e `skin`; d3, d5 e d7 são

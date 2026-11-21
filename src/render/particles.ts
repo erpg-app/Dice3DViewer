@@ -1,6 +1,6 @@
 import { createSeededRandom, type SeededRandom } from '../random'
-import { parseParticleColor } from '../particleOptions'
-import type { ParticleEffectDefinition, ParticleEmitterOptions } from '../types'
+import { parseParticleColor, particleLayers } from '../particleOptions'
+import type { ParticleEffectDefinition, ParticleEmitterOptions, ParticleMoment } from '../types'
 import type { ReadonlyVec3 } from '../engine/vector'
 
 export { customizeEffect } from './particleCustomize'
@@ -9,8 +9,8 @@ export { PARTICLE_FRAGMENT, PARTICLE_VERTEX } from './particleShaders'
 
 /** Particles alive at once; a burst beyond this recycles random live particles. */
 export const PARTICLE_CAPACITY = 4000
-/** Floats per particle in a render batch: x, y, z, size, premultiplied r, g, b, a, shape, angle. */
-export const PARTICLE_STRIDE = 10
+/** Floats per particle in a render batch: x, y, z, size, premultiplied r, g, b, a, shape, angle, stretch, heat. */
+export const PARTICLE_STRIDE = 12
 
 export type ParticleBurst = 'impact' | 'collision' | 'settle' | 'explode' | 'critical'
 
@@ -56,7 +56,18 @@ interface Emitter {
 	readonly shape: number
 	readonly orient: Orientation
 	readonly spin: number
+	readonly turbulence: number
+	readonly attract: number
+	readonly stretch: number
+	readonly bounce: number
+	readonly heat: number
+	/** 0 volume, 1 ring, 2 shell. */
+	readonly spawn: number
+	readonly spread: number
 }
+
+const NO_LAYERS: readonly ParticleEmitterOptions[] = []
+const SPAWNS: Readonly<Record<string, number>> = { volume: 0, ring: 1, shell: 2 }
 
 /** A link particle spans the gap between two dice along this angle. */
 interface Span {
@@ -76,12 +87,13 @@ const MOTION = 2
 /** Sprite indices of the particle shader. */
 export const SHAPES: Readonly<Record<string, number>> = {
 	soft: 0, spark: 1, star: 2, ring: 3, confetti: 4, smoke: 5,
-	bolt: 6, arc: 7, flame: 8, snowflake: 9, heart: 10, diamond: 11, triangle: 12, cross: 13
+	bolt: 6, arc: 7, flame: 8, snowflake: 9, heart: 10, diamond: 11, triangle: 12, cross: 13,
+	bubble: 14, petal: 15, shard: 16, moon: 17, comet: 18, drop: 19
 }
 /** Shader index of the first image of the atlas. */
-export const IMAGE_SHAPE_BASE = 16
+export const IMAGE_SHAPE_BASE = 32
 /** Shapes that point along their motion unless told otherwise. */
-const MOTION_SHAPES: ReadonlySet<string> = new Set(['spark', 'bolt'])
+const MOTION_SHAPES: ReadonlySet<string> = new Set(['spark', 'bolt', 'comet', 'drop'])
 /** Sprite space x points up the screen at this angle (shader `q`, world z grows down the screen). */
 const UP_ANGLE = -Math.PI / 2
 
@@ -111,13 +123,17 @@ export class ParticleSystem {
 	readonly #phase = new Float32Array(PARTICLE_CAPACITY)
 	readonly #angle = new Float32Array(PARTICLE_CAPACITY)
 	readonly #spin = new Float32Array(PARTICLE_CAPACITY)
+	/** Where each particle was born (`attract` pulls it back there). */
+	readonly #ox = new Float32Array(PARTICLE_CAPACITY)
+	readonly #oy = new Float32Array(PARTICLE_CAPACITY)
+	readonly #oz = new Float32Array(PARTICLE_CAPACITY)
 	/** Palette color of each particle (RGB). */
 	readonly #tint = new Float32Array(PARTICLE_CAPACITY * 3)
 	readonly #emitterOf = new Uint16Array(PARTICLE_CAPACITY)
 	readonly #emitters: Emitter[] = []
 	readonly #registry = new Map<ParticleEmitterOptions, number>()
-	readonly #debt = new WeakMap<object, number>()
-	readonly #groundDebt = new WeakMap<object, number>()
+	/** Fractions of a particle owed per die and emitter (continuous moments). */
+	readonly #debt = new WeakMap<object, Map<ParticleEmitterOptions, number>>()
 	readonly #additive = new Float32Array(PARTICLE_CAPACITY * PARTICLE_STRIDE)
 	readonly #alpha = new Float32Array(PARTICLE_CAPACITY * PARTICLE_STRIDE)
 	/** Alpha-blended particles of the frame, drawn from the lowest (farthest from the camera) up. */
@@ -145,20 +161,25 @@ export class ParticleSystem {
 
 	/** Seconds an aura lasts after a die rests (0 without an aura). */
 	get auraSeconds(): number {
-		return this.#effect?.aura ? Math.max(0, this.#effect.auraSeconds ?? 2.5) : 0
+		return this.#layers('aura').length ? Math.max(0, this.#effect!.auraSeconds ?? 2.5) : 0
 	}
 
 	/** Seconds links keep going after the dice rest (0 without links). */
 	get linkSeconds(): number {
-		return this.#effect?.link ? Math.max(0, this.#effect.linkSeconds ?? 2) : 0
+		return this.hasLink ? Math.max(0, this.#effect!.linkSeconds ?? 2) : 0
 	}
 
 	get hasLink(): boolean {
-		return Boolean(this.#effect?.link)
+		return this.#layers('link').length > 0
 	}
 
 	get hasTrail(): boolean {
-		return Boolean(this.#effect?.trail || this.#effect?.ground)
+		return this.#layers('trail').length > 0 || this.#layers('ground').length > 0
+	}
+
+	/** Emitters of a moment (one, or the layers of a stack). */
+	#layers(moment: ParticleMoment): readonly ParticleEmitterOptions[] {
+		return this.#effect ? particleLayers(this.#effect, moment) : NO_LAYERS
 	}
 
 	/** Effect for the next emissions; live particles keep the emitter they were born with. */
@@ -179,28 +200,31 @@ export class ParticleSystem {
 
 	/** Continuous emission while a die travels, proportional to its speed (full rate at 6 units/s). */
 	trail(key: object, position: ReadonlyVec3, velocity: ReadonlyVec3, dt: number, radius: number, subject?: ParticleSubject): void {
-		const options = this.#effect?.trail
-		if(!options || dt <= 0) return
+		if(dt <= 0) return
 		const speed = Math.sqrt(velocity[0] * velocity[0] + velocity[1] * velocity[1] + velocity[2] * velocity[2])
-		if(!this.#allows(options, subject, key, undefined, speed, true)) return
-		this.#stream(this.#debt, key, options, options.amount * this.#intensity * Math.min(1.5, speed / 6) * dt, position, velocity, radius * 0.55)
+		for(const options of this.#layers('trail')) {
+			if(!this.#allows(options, subject, key, undefined, speed, true)) continue
+			this.#stream(key, options, options.amount * this.#intensity * Math.min(1.5, speed / 6) * dt, position, velocity, radius * 0.55)
+		}
 	}
 
 	/** Marks on the table while a die rolls near it: `amount` per unit of distance. */
 	ground(key: object, position: ReadonlyVec3, velocity: ReadonlyVec3, dt: number, radius: number, subject?: ParticleSubject): void {
-		const options = this.#effect?.ground
-		if(!options || dt <= 0) return
+		if(dt <= 0) return
 		const speed = Math.sqrt(velocity[0] * velocity[0] + velocity[2] * velocity[2])
-		if(!this.#allows(options, subject, key, undefined, speed, true)) return
-		this.#stream(this.#groundDebt, key, options, options.amount * this.#intensity * (speed * dt), [position[0], 0.012, position[2]], velocity, radius * 0.3, true)
+		for(const options of this.#layers('ground')) {
+			if(!this.#allows(options, subject, key, undefined, speed, true)) continue
+			this.#stream(key, options, options.amount * this.#intensity * (speed * dt), [position[0], 0.012, position[2]], velocity, radius * 0.3, true)
+		}
 	}
 
 	/** Emission around a resting die; `fade` goes from 1 to 0 over `auraSeconds`. `always` skips the conditions. */
 	aura(key: object, position: ReadonlyVec3, dt: number, radius: number, fade: number, subject?: ParticleSubject, always = false): void {
-		const options = this.#effect?.aura
-		if(!options || dt <= 0 || fade <= 0) return
-		if(!always && !this.#allows(options, subject, key, undefined, undefined, true)) return
-		this.#stream(this.#debt, key, options, options.amount * this.#intensity * fade * dt, position, [0, 0, 0], radius * 0.6)
+		if(dt <= 0 || fade <= 0) return
+		for(const options of this.#layers('aura')) {
+			if(!always && !this.#allows(options, subject, key, undefined, undefined, true)) continue
+			this.#stream(key, options, options.amount * this.#intensity * fade * dt, position, NO_MOTION, radius * 0.6)
+		}
 	}
 
 	/**
@@ -208,22 +232,25 @@ export class ParticleSystem {
 	 * along it and sized to the gap. `fade` goes from 1 to 0 after the dice rest.
 	 */
 	link(key: object, a: ReadonlyVec3, b: ReadonlyVec3, dt: number, fade: number, subjects?: readonly ParticleSubject[]): void {
-		const options = this.#effect?.link
-		if(!options || dt <= 0 || fade <= 0) return
+		const layers = this.#layers('link')
+		if(!layers.length || dt <= 0 || fade <= 0) return
 		const dx = b[0] - a[0], dz = b[2] - a[2]
 		const gap = Math.sqrt(dx * dx + dz * dz)
 		if(gap < 1e-3 || gap > Math.max(0, this.#effect?.linkDistance ?? 5)) return
-		if(!this.#allows(options, subjects, key, undefined, undefined, true)) return
 		const middle: ReadonlyVec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
-		this.#stream(this.#debt, key, options, options.amount * this.#intensity * fade * dt, middle, NO_MOTION, 0, false, { gap, angle: Math.atan2(dz, dx) })
+		const span = { gap, angle: Math.atan2(dz, dx) }
+		for(const options of layers) {
+			if(!this.#allows(options, subjects, key, undefined, undefined, true)) continue
+			this.#stream(key, options, options.amount * this.#intensity * fade * dt, middle, NO_MOTION, 0, false, span)
+		}
 	}
 
 	burst(kind: ParticleBurst, position: ReadonlyVec3, radius: number, burst: BurstOptions = {}): void {
-		const options = this.#effect?.[kind]
-		if(!options) return
-		if(!burst.always && !this.#allows(options, burst.subject, burst.key, burst.force, undefined, false)) return
-		const count = Math.round(options.amount * this.#intensity * Math.max(0, burst.strength ?? 1))
-		if(count > 0) this.#emit(this.#register(options), count, position, [0, 0, 0], radius * (kind === 'impact' || kind === 'collision' ? 0.35 : 0.5), false)
+		for(const options of this.#layers(kind)) {
+			if(!burst.always && !this.#allows(options, burst.subject, burst.key, burst.force, undefined, false)) continue
+			const count = Math.round(options.amount * this.#intensity * Math.max(0, burst.strength ?? 1))
+			if(count > 0) this.#emit(this.#register(options), count, position, NO_MOTION, radius * (kind === 'impact' || kind === 'collision' ? 0.35 : 0.5), false)
+		}
 	}
 
 	/** Checks an emitter's `when` conditions; a cooldown is consumed only when the burst plays. */
@@ -261,6 +288,11 @@ export class ParticleSystem {
 		this.#time += dt
 		for(let i = 0; i < this.#count; i++) {
 			const age = this.#age[i]! + dt
+			if(age < 0) {
+				// Still waiting for its `delay`.
+				this.#age[i] = age
+				continue
+			}
 			if(age >= this.#life[i]!) {
 				this.#move(this.#count - 1, i)
 				this.#count--
@@ -274,6 +306,19 @@ export class ParticleSystem {
 				const keep = Math.max(0, 1 - emitter.drag * dt)
 				vx *= keep; vy *= keep; vz *= keep
 			}
+			if(emitter.attract !== 0) {
+				const pull = emitter.attract * dt
+				vx += (this.#ox[i]! - this.#px[i]!) * pull
+				vy += (this.#oy[i]! - this.#py[i]!) * pull
+				vz += (this.#oz[i]! - this.#pz[i]!) * pull
+			}
+			if(emitter.turbulence !== 0) {
+				// Three slow, unrelated waves per particle read as a wandering force.
+				const push = emitter.turbulence * dt, phase = this.#phase[i]!
+				vx += Math.sin(age * 3.1 + phase) * push
+				vy += Math.sin(age * 2.3 + phase * 1.7) * push * 0.5
+				vz += Math.cos(age * 2.7 + phase * 2.3) * push
+			}
 			if(emitter.swirl !== 0) {
 				const angle = emitter.swirl * dt, cos = Math.cos(angle), sin = Math.sin(angle)
 				const x = vx * cos - vz * sin
@@ -284,7 +329,7 @@ export class ParticleSystem {
 			if(y < 0.012) {
 				// Particles settle on the table instead of sinking through it.
 				y = 0.012
-				if(vy < 0) vy *= -0.25
+				if(vy < 0) vy *= -emitter.bounce
 				vx *= 0.7
 				vz *= 0.7
 			}
@@ -317,6 +362,7 @@ export class ParticleSystem {
 
 	/** One particle of a batch at `offset`; false when it is invisible this frame. */
 	#write(target: Float32Array, offset: number, i: number, emitter: Emitter): boolean {
+		if(this.#age[i]! < 0) return false
 		const t = this.#age[i]! / this.#life[i]!
 		const stops = emitter.stops, segments = stops.length / 4 - 1
 		const position = t * segments
@@ -344,13 +390,18 @@ export class ParticleSystem {
 		target[offset + 7] = a
 		target[offset + 8] = emitter.shape
 		target[offset + 9] = this.#angle[i]!
+		const vx = this.#vx[i]!, vz = this.#vz[i]!
+		target[offset + 10] = emitter.stretch > 0 ? 1 + Math.min(7, emitter.stretch * Math.sqrt(vx * vx + vz * vz)) : 1
+		target[offset + 11] = emitter.heat
 		return true
 	}
 
-	#stream(debts: WeakMap<object, number>, key: object, options: ParticleEmitterOptions, amount: number, position: ReadonlyVec3, velocity: ReadonlyVec3, radius: number, flat = false, span?: Span): void {
-		const debt = (debts.get(key) ?? 0) + amount
+	#stream(key: object, options: ParticleEmitterOptions, amount: number, position: ReadonlyVec3, velocity: ReadonlyVec3, radius: number, flat = false, span?: Span): void {
+		let debts = this.#debt.get(key)
+		if(!debts) this.#debt.set(key, debts = new Map())
+		const debt = (debts.get(options) ?? 0) + amount
 		const count = Math.floor(debt)
-		debts.set(key, debt - count)
+		debts.set(options, debt - count)
 		if(count > 0) this.#emit(this.#register(options), count, position, velocity, radius, flat, span)
 	}
 
@@ -373,8 +424,15 @@ export class ParticleSystem {
 			grow: options.grow ?? 0.3,
 			flicker: options.flicker ?? 0,
 			shape: options.image ? this.#imageShape(options.image) : SHAPES[shapeName] ?? 0,
-			orient: ORIENTATIONS[options.orient ?? (!options.image && MOTION_SHAPES.has(shapeName) ? 'motion' : 'random')] ?? 0,
-			spin: options.spin ?? 0
+			orient: ORIENTATIONS[options.orient ?? ((!options.image && MOTION_SHAPES.has(shapeName)) || options.stretch ? 'motion' : 'random')] ?? 0,
+			spin: options.spin ?? 0,
+			turbulence: options.turbulence ?? 0,
+			attract: options.attract ?? 0,
+			stretch: options.stretch ?? 0,
+			bounce: options.bounce ?? 0.25,
+			heat: options.heat ?? 0,
+			spawn: SPAWNS[options.spawn ?? 'volume'] ?? 0,
+			spread: options.spread ?? 1
 		}
 		this.#emitters.push(emitter)
 		this.#registry.set(options, this.#emitters.length - 1)
@@ -394,13 +452,26 @@ export class ParticleSystem {
 		const random = this.#random
 		const sourceSpeed = Math.sqrt(source[0] * source[0] + source[1] * source[1] + source[2] * source[2])
 		const paletteSize = emitter.palette.length / 3
+		const delay = options.delay
+		// Rings and shells stand off the die, whose radius is about three times the default spawn area.
+		const reach = emitter.spawn ? Math.max(radius, 0.2) * 2.6 * emitter.spread : radius * emitter.spread
 		for(let n = 0; n < count; n++) {
 			let i = this.#count
 			if(i < PARTICLE_CAPACITY) this.#count++
 			else i = Math.floor(random.next() * PARTICLE_CAPACITY)
-			this.#px[i] = position[0] + (random.next() * 2 - 1) * radius
-			this.#py[i] = flat ? position[1] : Math.max(0.012, position[1] + (random.next() * 2 - 1) * radius)
-			this.#pz[i] = position[2] + (random.next() * 2 - 1) * radius
+			if(emitter.spawn && !span) {
+				const around = random.next() * Math.PI * 2
+				const lift = emitter.spawn === 2 ? random.next() * 2 - 1 : 0
+				const flatness = Math.sqrt(1 - lift * lift)
+				this.#px[i] = position[0] + Math.cos(around) * flatness * reach
+				this.#py[i] = flat ? position[1] : Math.max(0.012, position[1] + lift * reach)
+				this.#pz[i] = position[2] + Math.sin(around) * flatness * reach
+			} else {
+				this.#px[i] = position[0] + (random.next() * 2 - 1) * reach
+				this.#py[i] = flat ? position[1] : Math.max(0.012, position[1] + (random.next() * 2 - 1) * reach)
+				this.#pz[i] = position[2] + (random.next() * 2 - 1) * reach
+			}
+			this.#ox[i] = position[0]; this.#oy[i] = position[1]; this.#oz[i] = position[2]
 			const speed = random.range(options.speed[0], options.speed[1])
 			let vx: number, vy: number, vz: number
 			const heading = random.next() * Math.PI * 2
@@ -425,7 +496,7 @@ export class ParticleSystem {
 			}
 			if(flat) vy = 0
 			this.#vx[i] = vx; this.#vy[i] = vy; this.#vz[i] = vz
-			this.#age[i] = 0
+			this.#age[i] = delay ? -random.range(delay[0], delay[1]) : 0
 			this.#life[i] = random.range(options.life[0], options.life[1])
 			this.#size[i] = random.range(options.size[0], options.size[1])
 			this.#phase[i] = random.next() * Math.PI * 2
@@ -456,6 +527,7 @@ export class ParticleSystem {
 		this.#age[to] = this.#age[from]!; this.#life[to] = this.#life[from]!
 		this.#size[to] = this.#size[from]!; this.#phase[to] = this.#phase[from]!
 		this.#angle[to] = this.#angle[from]!; this.#spin[to] = this.#spin[from]!
+		this.#ox[to] = this.#ox[from]!; this.#oy[to] = this.#oy[from]!; this.#oz[to] = this.#oz[from]!
 		this.#tint[to * 3] = this.#tint[from * 3]!
 		this.#tint[to * 3 + 1] = this.#tint[from * 3 + 1]!
 		this.#tint[to * 3 + 2] = this.#tint[from * 3 + 2]!

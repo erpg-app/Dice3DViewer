@@ -1,4 +1,4 @@
-import { PARTICLE_MOMENTS } from '../particleOptions'
+import { PARTICLE_MOMENTS, particleLayers } from '../particleOptions'
 import type { ParticleEffectDefinition } from '../types'
 import { createTextureCanvas, getImageSize, getTextureContext, loadImage, type ImageLoader, type RenderImage } from './images'
 
@@ -43,7 +43,9 @@ export class ParticleAtlas implements ParticleAtlasSource {
 
 	/** Gives a slot to every image of the effect (starting their download). */
 	prepare(effect: ParticleEffectDefinition | null): void {
-		const urls = PARTICLE_MOMENTS.map(moment => effect?.[moment]?.image).filter((url): url is string => Boolean(url))
+		const urls = effect
+			? PARTICLE_MOMENTS.flatMap(moment => particleLayers(effect, moment).map(emitter => emitter.image)).filter((url): url is string => Boolean(url))
+			: []
 		this.#inUse = new Set(urls)
 		for(const url of urls) this.slot(url)
 	}

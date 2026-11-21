@@ -1,10 +1,10 @@
 {
   "particlePresets.js": {
-    "file": "chunks/particlePresets-273b1da4.js",
+    "file": "chunks/particlePresets-a0733908.js",
     "src": "particlePresets.js"
   },
   "particles.js": {
-    "file": "chunks/particles-cc9ecc39.js",
+    "file": "chunks/particles-4bacccdf.js",
     "src": "particles.js"
   },
   "proceduralDice.js": {
@@ -12,7 +12,7 @@
     "src": "proceduralDice.js"
   },
   "sceneWorker.js": {
-    "file": "chunks/sceneWorker-f6451122.js",
+    "file": "chunks/sceneWorker-33f8ebd0.js",
     "src": "sceneWorker.js"
   },
   "src/index.ts": {

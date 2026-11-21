@@ -1,11 +1,11 @@
-import { validateGlowOptions, validateParticleOptions, validateSkinOptions } from './particleOptions'
-import type { DiceGlowOptions, DiceParticleOptions, DiceSkinOptions } from './types'
+import { validateFinishOptions, validateGlowOptions, validateMotionOptions, validateParticleOptions, validateSkinOptions } from './particleOptions'
+import type { DiceFinishOptions, DiceGlowOptions, DiceMotionOptions, DiceParticleOptions, DiceSkinOptions } from './types'
 
 export const DICE_LOOK_FORMAT = 'dice3dview-look'
 export const DICE_LOOK_VERSION = 1
 
 /**
- * A complete dice look: color, skin, particle effect and glow. The workshop of
+ * A complete dice look: color, skin, finish, particle effect, glow and motion. The workshop of
  * the test page exports it as a JSON file, ready to be stored and applied later.
  */
 export interface DiceLook {
@@ -17,6 +17,8 @@ export interface DiceLook {
 	readonly skin?: DiceSkinOptions | null
 	readonly particles?: DiceParticleOptions | null
 	readonly glow?: DiceGlowOptions | null
+	readonly finish?: DiceFinishOptions | null
+	readonly motion?: DiceMotionOptions | null
 }
 
 /** Viewer options a look sets. Parts the look leaves out are turned off. */
@@ -25,6 +27,8 @@ export interface DiceLookOptions {
 	readonly skin: DiceSkinOptions | null
 	readonly particles: DiceParticleOptions | null
 	readonly glow: DiceGlowOptions | null
+	readonly finish: DiceFinishOptions | null
+	readonly motion: DiceMotionOptions | null
 }
 
 const fail = (message: string): never => {
@@ -55,6 +59,10 @@ export const diceLookOptions = (look: unknown): DiceLookOptions => {
 	const glow = value.glow ?? null
 	validateSkinOptions(skin)
 	validateParticleOptions(particles)
+	const finish = value.finish ?? null
+	const motion = value.motion ?? null
 	validateGlowOptions(glow)
-	return Object.freeze({ ...(value.themeColor ? { themeColor: value.themeColor } : {}), skin, particles, glow })
+	validateFinishOptions(finish)
+	validateMotionOptions(motion)
+	return Object.freeze({ ...(value.themeColor ? { themeColor: value.themeColor } : {}), skin, particles, glow, finish, motion })
 }

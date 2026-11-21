@@ -1,4 +1,5 @@
 import type {
+	DiceFinishMask,
 	DiceSkinOptions,
 	DisplayRenderer,
 	ParticleBurstMoment,
@@ -66,6 +67,7 @@ interface VisualRecipe {
 	readonly config: ResolvedThemeConfig
 	readonly themeColor: string
 	readonly skin: DiceSkinOptions | null
+	readonly mask: DiceFinishMask | null
 	readonly type: ModelDieType | ProceduralDieType | 'coin'
 }
 
@@ -89,6 +91,8 @@ interface Entry {
 	scale: number
 	/** 1 = theme colors; discarded dice are greyed out. */
 	saturation: number
+	/** When the die last came to rest, for the settle flourish (`motion.settle`). */
+	settledAt?: number
 }
 
 interface Handle {
@@ -146,6 +150,9 @@ const MAX_FRAME_MS = 50
 const WARM_SIDES = [20, 12, 10, 8, 6, 4] as const
 const WARM_DISTANCE = 1000
 const RING_MS = 650
+/** Length of the settle flourish (`motion.settle`). */
+const FLOURISH_MS = 460
+const NO_SCROLL: readonly [number, number] = [0, 0]
 /** Reduced motion: dice fade in at rest instead of being thrown. */
 const STILL_FADE_MS = 240
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
@@ -192,6 +199,8 @@ export class SceneRenderer implements DisplayRenderer {
 	/** Resting dice emitting their aura: when it started and whether it skips the conditions (manual). */
 	readonly #auras = new Map<Entry, { readonly since: number; readonly always: boolean }>()
 	#particleSeed = 'particles'
+	/** Frames keep coming until this time for the settle flourish of the last die. */
+	#flourishUntil = 0
 	#frameRequest: number | null = null
 	#ambientRequest: number | null = null
 	#frame: (FrameSetup & { readonly aspect: number; readonly lightIntensity: number }) | undefined
@@ -374,7 +383,14 @@ export class SceneRenderer implements DisplayRenderer {
 		// A new effect applies at once to what is still emitting (trails, auras).
 		if(particlesChanged) void this.#prepareParticles(this.#particleSeed).catch((error: unknown) => console.error('[DiceResultViewer] Particle effect failed to load:', error))
 		this.#requestRender()
-		if(options.glow?.pulse) this.#ambient()
+		if(this.#alive(options)) this.#ambient()
+	}
+
+	/** The look moves on its own (animated glow, flowing skin): frames keep coming while dice are on the table. */
+	#alive(options: Readonly<RequiredViewerOptions> | undefined): boolean {
+		const glow = options?.glow
+		const flows = (scroll: readonly [number, number] | undefined): boolean => Boolean(scroll && (scroll[0] || scroll[1]))
+		return Boolean(glow && (glow.mode ? glow.mode !== 'steady' : glow.pulse)) || flows(options?.skin?.scroll) || flows(options?.skin?.detail?.scroll)
 	}
 
 	/** Plays a particle moment now on the dice on the table (all of them or `dieIds`), ignoring conditions. */
@@ -543,7 +559,7 @@ export class SceneRenderer implements DisplayRenderer {
 			scale: 1,
 			saturation: normalized.discarded ? DISCARDED_SATURATION : 1
 		}
-		const recipe = (type: VisualRecipe['type']): VisualRecipe => ({ config, themeColor: normalized.themeColor, skin: options.skin, type })
+		const recipe = (type: VisualRecipe['type']): VisualRecipe => ({ config, themeColor: normalized.themeColor, skin: options.skin, mask: options.finish?.mask ?? null, type })
 		if(normalized.sides === 2) {
 			const coin = recipe('coin')
 			const visual = await this.#buildVisual(coin)
@@ -605,7 +621,7 @@ export class SceneRenderer implements DisplayRenderer {
 	async #buildVisual(recipe: VisualRecipe): Promise<PolyhedronVisual | CoinVisual> {
 		const assets = this.#assets!
 		const scale = this.#options!.scale
-		const { config, themeColor, skin } = recipe
+		const { config, themeColor, skin, mask } = recipe
 		if(recipe.type === 'coin') {
 			const [front, back, edge] = await Promise.all([
 				assets.coinFace(config, 'front', themeColor, skin),
@@ -617,11 +633,11 @@ export class SceneRenderer implements DisplayRenderer {
 		const proceduralSides = Number(recipe.type.slice(1))
 		if(isProceduralSides(proceduralSides)) {
 			await assets.loadProcedural(this.#context!.effects.irregular)
-			const material = await assets.proceduralMaterial(config, themeColor, skin, proceduralSides)
+			const material = await assets.proceduralMaterial(config, themeColor, skin, proceduralSides, mask)
 			return { kind: 'polyhedron', mesh: assets.proceduralGeometry(proceduralSides).mesh, material, scale }
 		}
 		const type = recipe.type as ModelDieType
-		const [model, material] = await Promise.all([assets.loadModel(config.meshFilePath), assets.material(config, themeColor, skin)])
+		const [model, material] = await Promise.all([assets.loadModel(config.meshFilePath), assets.material(config, themeColor, skin, mask)])
 		const geometry = model.geometry.get(type)
 		if(!geometry) throw new Error(`${recipe.type} is unavailable in theme '${config.theme}'.`)
 		return { kind: 'polyhedron', mesh: geometry.visual, material, scale }
@@ -713,6 +729,10 @@ export class SceneRenderer implements DisplayRenderer {
 				if(entry) particles?.burst('impact', [entry.position[0], 0.05, entry.position[2]], entry.shape.radius, { strength: strength(marker.force), force: marker.force ?? 0, subject: entry.die, key: entry })
 			} else if(marker.type === 'settle') {
 				if(entry) {
+					if(this.#options!.motion?.settle && this.#options!.motion.settle !== 'none') {
+						entry.settledAt = performance.now()
+						this.#flourishUntil = entry.settledAt + FLOURISH_MS
+					}
 					particles?.burst('settle', entry.position, entry.shape.radius, { subject: entry.die, key: entry })
 					if(particles?.auraSeconds) this.#auras.set(entry, { since: performance.now(), always: false })
 				}
@@ -1191,9 +1211,9 @@ export class SceneRenderer implements DisplayRenderer {
 			}
 			if(!this.#running) this.#render()
 			// A pulsing glow breathes for as long as dice are on the table.
-			const breathing = Boolean(this.#options?.glow?.pulse && !this.#reducedMotion() && this.#entries.some(entry => entry.visible))
+			const breathing = this.#alive(this.#options) && !this.#reducedMotion() && this.#entries.some(entry => entry.visible)
 			const linking = this.#linkFade(performance.now()) > 0
-			if(this.#outgoing || this.#rings.length || this.#particles?.count || this.#auras.size || breathing || linking) this.#ambient()
+			if(this.#outgoing || this.#rings.length || this.#particles?.count || this.#auras.size || breathing || linking || performance.now() < this.#flourishUntil) this.#ambient()
 		})
 	}
 
@@ -1220,9 +1240,23 @@ export class SceneRenderer implements DisplayRenderer {
 			}
 			this.#frame = frame
 		}
-		gl.beginFrame(canvas.width, canvas.height)
+		const finish = options.finish
+		const rimStrength = finish?.rim ? finish.rimStrength ?? 1 : 0
+		const rim = parseHexColor(finish?.rim ?? '', [0, 0, 0])
+		gl.beginFrame(canvas.width, canvas.height, {
+			time: reduced ? 0 : now / 1000,
+			gloss: finish?.gloss ?? -1,
+			metal: finish?.metal ?? 0,
+			iridescence: finish?.iridescence ?? 0,
+			rim: [rim[0] * rimStrength, rim[1] * rimStrength, rim[2] * rimStrength],
+			label: finish?.labelColor ? parseHexColor(finish.labelColor) : null,
+			scroll: options.skin?.scroll ?? NO_SCROLL
+		})
 		const customGlow = options.glow?.color ? parseParticleColor(options.glow.color) : null
 		const glowColor: Vec3 | null = customGlow ? [customGlow[0], customGlow[1], customGlow[2]] : null
+		const glowMode = reduced ? 'steady' : options.glow?.mode ?? (options.glow?.pulse ? 'pulse' : 'steady')
+		const glowClock = now / 1000 * (options.glow?.speed ?? 1)
+		const settle = reduced ? undefined : options.motion?.settle
 
 		// The previous scene fading out (a new throw has started).
 		let exit = 1
@@ -1234,15 +1268,36 @@ export class SceneRenderer implements DisplayRenderer {
 		const outgoing = new Set(leaving)
 		const visible = this.#entries.filter(entry => entry.visible && entry.alpha > 0.001)
 		const alphaOf = (entry: Entry): number => outgoing.has(entry) ? entry.alpha * exit : entry.alpha
-		const scaleOf = (entry: Entry): number => outgoing.has(entry) ? entry.scale * (0.9 + 0.1 * exit) : entry.scale
+		/** Progress (0..1) of the settle flourish of a die, or 1 when it is over. */
+		const flourish = (entry: Entry): number => entry.settledAt === undefined ? 1 : clamp01((now - entry.settledAt) / FLOURISH_MS)
+		const scaleOf = (entry: Entry): number => {
+			if(outgoing.has(entry)) return entry.scale * (0.9 + 0.1 * exit)
+			if(settle !== 'pop') return entry.scale
+			// Pop: swells at once and eases back to its size.
+			const t = flourish(entry)
+			return entry.scale * (1 + 0.2 * Math.sin(Math.PI * t) * (1 - t))
+		}
 		/** Own light of a die (viewer `glow`): discarded dice go dark, a pulse breathes slowly. */
 		const ownGlow = (entry: Entry): { color: Vec3; strength: number } => {
 			const glow = options.glow
 			if(!glow) return NO_GLOW
 			const lit = clamp01((entry.saturation - DISCARDED_SATURATION) / (1 - DISCARDED_SATURATION))
-			const breath = glow.pulse && !reduced ? 0.7 + 0.3 * Math.sin(now / 1000 * Math.PI * 2 / 2.4 + entry.position[0] * 0.9) : 1
+			// Each die runs a little out of step with its neighbours.
+			const t = glowClock + entry.position[0] * 0.34
+			let breath = 1
+			if(glowMode === 'pulse') breath = 0.7 + 0.3 * Math.sin(t * Math.PI * 2 / 2.4)
+			else if(glowMode === 'flicker') breath = 0.74 + 0.26 * Math.sin(t * 23) * Math.sin(t * 7.3 + 1.3)
+			else if(glowMode === 'heartbeat') {
+				const beat = (t * 1.1) % 1
+				breath = 0.5 + 0.5 * Math.min(1, Math.exp(-(((beat - 0.1) * 14) ** 2)) + 0.7 * Math.exp(-(((beat - 0.34) * 14) ** 2)))
+			}
 			const strength = (glow.intensity ?? 1) * breath * lit * alphaOf(entry)
-			return strength > 0.001 ? { color: glowColor ?? lightColor(entry.accentColor), strength } : NO_GLOW
+			if(strength <= 0.001) return NO_GLOW
+			if(glowMode === 'rainbow') {
+				const hue = t * 0.22 * Math.PI * 2
+				return { color: [0.5 + 0.5 * Math.cos(hue), 0.5 + 0.5 * Math.cos(hue - 2.094), 0.5 + 0.5 * Math.cos(hue + 2.094)], strength }
+			}
+			return { color: glowColor ?? lightColor(entry.accentColor), strength }
 		}
 
 		if(options.glow && options.glow.light !== false) {
@@ -1306,7 +1361,10 @@ export class SceneRenderer implements DisplayRenderer {
 			const scale = entry.visual.kind === 'polyhedron' ? entry.visual.scale * scaleOf(entry) : scaleOf(entry)
 			const state: DrawState = {
 				position: entry.position,
-				rotation: entry.rotation,
+				// Twirl: one turn on its face, slowing to a stop exactly where it rested.
+				rotation: settle === 'twirl' && flourish(entry) < 1
+					? qmul(quatFromAxisAngle([0, 1, 0], Math.PI * 2 * (1 - easeOut(flourish(entry)))), entry.rotation)
+					: entry.rotation,
 				scale,
 				alpha: alphaOf(entry),
 				glow: glow.color,

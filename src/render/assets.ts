@@ -3,7 +3,7 @@ import { createCoinShape } from './coinTheme'
 import type { ProceduralSides } from './proceduralSides'
 import { loadModule } from '../loadModule'
 import type { ReadonlyVec3, Vec3 } from '../engine/vector'
-import type { CoinTheme, DiceSkinOptions, ResolvedThemeConfig } from '../types'
+import type { CoinTheme, DiceFinishMask, DiceSkinOptions, ResolvedThemeConfig } from '../types'
 import type { DiceGL, GLMesh, GLTexture, SurfaceMaterial } from './gl'
 import { createTextureCanvas, getTextureContext, isSvgImage, loadImage, type ImageLoader, type ImageSize } from './images'
 
@@ -73,11 +73,12 @@ export const parseHexColor = (hex: string, fallback: ReadonlyVec3 = [0.18, 0.52,
 
 const SKIN_BLENDS = { normal: 0, multiply: 1, screen: 2, overlay: 3 } as const
 
-type SkinFields = Pick<SurfaceMaterial, 'skin' | 'skinScale' | 'skinBlend' | 'skinOpacity' | 'outline'>
+type SkinFields = Pick<SurfaceMaterial, 'skin' | 'skinScale' | 'skinBlend' | 'skinOpacity' | 'outline' | 'detail' | 'detailScale' | 'detailBlend' | 'detailOpacity' | 'detailScroll'>
+type MaskFields = Pick<SurfaceMaterial, 'mask' | 'maskMode' | 'maskScale' | 'maskInvert' | 'maskAmounts' | 'maskGlow'>
 
 /** Cache key part for a skin (empty without one). */
 const skinKey = (skin: DiceSkinOptions | null): string =>
-	skin ? JSON.stringify([skin.texture, skin.scale ?? 1, skin.blend ?? 'normal', skin.opacity ?? 1, skin.labels ?? 'auto']) : ''
+	skin ? JSON.stringify([skin.texture, skin.scale ?? 1, skin.blend ?? 'normal', skin.opacity ?? 1, skin.labels ?? 'auto', skin.detail ?? 0]) : ''
 
 const resolveAsset = (basePath: string, value: string): string =>
 	/^(?:data:|https?:|blob:|\/)/.test(value) ? value : `${basePath}/${value}`
@@ -239,6 +240,8 @@ export class AssetLibrary {
 		const body = color + (layered - color) * (skin.opacity ?? 1)
 		const labels = skin.labels ?? 'auto'
 		const lightBody = labels === 'auto' ? body > 0.5 : labels === 'dark'
+		const detail = skin.detail
+		const detailData = detail ? await this.skin(detail.texture).catch(() => null) : null
 		return {
 			lightBody,
 			fields: {
@@ -247,15 +250,42 @@ export class AssetLibrary {
 				skinBlend: SKIN_BLENDS[skin.blend ?? 'normal'],
 				skinOpacity: skin.opacity ?? 1,
 				// Dark labels get a light outline and vice versa.
-				outline: lightBody ? [0.96, 0.96, 0.96] : [0.04, 0.04, 0.05]
+				outline: lightBody ? [0.96, 0.96, 0.96] : [0.04, 0.04, 0.05],
+				...(detail && detailData ? {
+					detail: detailData.texture,
+					detailScale: (detail.scale ?? 1) * 0.8,
+					detailBlend: SKIN_BLENDS[detail.blend ?? 'normal'],
+					detailOpacity: detail.opacity ?? 1,
+					detailScroll: detail.scroll ?? [0, 0]
+				} : {})
 			}
 		}
 	}
 
-	material(config: ResolvedThemeConfig, themeColor: string, skin: DiceSkinOptions | null = null): Promise<SurfaceMaterial> {
+	/**
+	 * Finish mask of a material: its own image, or the skin image when it has
+	 * none (`hasSkin`). The bright areas light up in `glowColor` or the die color.
+	 */
+	async #maskFields(mask: DiceFinishMask | null, hasSkin: boolean, base: Vec3): Promise<MaskFields> {
+		if(!mask) return {}
+		const data = mask.texture ? await this.skin(mask.texture).catch(() => null) : null
+		if(!data && !hasSkin) return {}
+		const glow = mask.glow ?? 0
+		const color = mask.glowColor ? parseHexColor(mask.glowColor) : base
+		return {
+			mask: data?.texture,
+			maskMode: data ? 1 : 2,
+			maskScale: (mask.scale ?? 1) * 0.8,
+			maskInvert: mask.invert === true,
+			maskAmounts: [mask.gloss ?? 0, mask.metal ?? 0, mask.iridescence ?? 0],
+			maskGlow: [color[0] * glow, color[1] * glow, color[2] * glow]
+		}
+	}
+
+	material(config: ResolvedThemeConfig, themeColor: string, skin: DiceSkinOptions | null = null, mask: DiceFinishMask | null = null): Promise<SurfaceMaterial> {
 		const colorTheme = config.material.type === 'color'
 		const activeSkin = colorTheme ? skin : null
-		const key = `${config.theme}|${themeColor}|${skinKey(activeSkin)}`
+		const key = `${config.theme}|${themeColor}|${skinKey(activeSkin)}|${mask ? JSON.stringify(mask) : ''}`
 		const cached = this.#materials.get(key)
 		if(cached) return cached
 		const pending = (async (): Promise<SurfaceMaterial> => {
@@ -284,7 +314,8 @@ export class AssetLibrary {
 				bump,
 				bumpLevel: config.material.bumpLevel ?? 1,
 				specularMap,
-				...layer.fields
+				...layer.fields,
+				...await this.#maskFields(colorTheme ? mask : null, Boolean(layer.fields.skin), base)
 			}
 		})()
 		this.#materials.set(key, pending)
@@ -358,8 +389,8 @@ export class AssetLibrary {
 	 * Material of a procedural die: the die color (and skin) under its own
 	 * numbers. These dice are always colorized, whatever the theme material.
 	 */
-	proceduralMaterial(config: ResolvedThemeConfig, themeColor: string, skin: DiceSkinOptions | null, sides: ProceduralSides): Promise<SurfaceMaterial> {
-		const key = `procedural|${sides}|${themeColor}|${skinKey(skin)}`
+	proceduralMaterial(config: ResolvedThemeConfig, themeColor: string, skin: DiceSkinOptions | null, sides: ProceduralSides, mask: DiceFinishMask | null = null): Promise<SurfaceMaterial> {
+		const key = `procedural|${sides}|${themeColor}|${skinKey(skin)}|${mask ? JSON.stringify(mask) : ''}`
 		const cached = this.#materials.get(key)
 		if(cached) return cached
 		const pending = (async (): Promise<SurfaceMaterial> => {
@@ -374,7 +405,8 @@ export class AssetLibrary {
 				// Light numbers in the atlas: light bodies show them inverted.
 				invertDiffuse: layer.lightBody ?? isLightColor(themeColor),
 				colorMask: true,
-				...layer.fields
+				...layer.fields,
+				...await this.#maskFields(mask, Boolean(layer.fields.skin), base)
 			}
 		})()
 		this.#materials.set(key, pending)

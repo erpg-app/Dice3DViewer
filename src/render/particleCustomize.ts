@@ -1,5 +1,5 @@
-import { PARTICLE_MOMENTS, parseParticleColor } from '../particleOptions'
-import type { DiceParticleOptions, ParticleEffectDefinition, ParticleEmitterOptions, ParticleMoment } from '../types'
+import { PARTICLE_MOMENTS, parseParticleColor, particleLayers } from '../particleOptions'
+import type { DiceParticleOptions, ParticleEffectDefinition, ParticleEmitterLayers, ParticleEmitterOptions, ParticleMoment } from '../types'
 
 type Customization = Pick<DiceParticleOptions, 'color' | 'shape' | 'size' | 'moments'>
 
@@ -36,14 +36,14 @@ export const customizeEffect = (effect: ParticleEffectDefinition, options: Custo
 	const known = cache.get(key)
 	if(known) return known
 	const tint = options.color ? parseParticleColor(options.color) : null
-	const result: Partial<Record<ParticleMoment, ParticleEmitterOptions>> & { auraSeconds?: number; linkDistance?: number; linkSeconds?: number } = {}
+	const result: Partial<Record<ParticleMoment, ParticleEmitterLayers>> & { auraSeconds?: number; linkDistance?: number; linkSeconds?: number } = {}
 	if(effect.auraSeconds !== undefined) result.auraSeconds = effect.auraSeconds
 	if(effect.linkDistance !== undefined) result.linkDistance = effect.linkDistance
 	if(effect.linkSeconds !== undefined) result.linkSeconds = effect.linkSeconds
 	for(const moment of PARTICLE_MOMENTS) {
-		const emitter = effect[moment]
-		if(!emitter || moments[moment] === false) continue
-		result[moment] = {
+		const layers = particleLayers(effect, moment)
+		if(!layers.length || moments[moment] === false) continue
+		const customized = layers.map((emitter): ParticleEmitterOptions => ({
 			...emitter,
 			size: [emitter.size[0] * size, emitter.size[1] * size],
 			...(options.shape ? { shape: options.shape } : {}),
@@ -51,7 +51,8 @@ export const customizeEffect = (effect: ParticleEffectDefinition, options: Custo
 				colors: emitter.colors.map(color => recolor(color, tint)),
 				...(emitter.palette ? { palette: emitter.palette.map(color => recolor(color, tint)) } : {})
 			} : {})
-		}
+		}))
+		result[moment] = customized.length === 1 ? customized[0]! : customized
 	}
 	const customized = Object.freeze(result) as ParticleEffectDefinition
 	cache.set(key, customized)
